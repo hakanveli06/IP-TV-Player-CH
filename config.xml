@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://hakanveli.com/apps/hvtv-hv9k26t901"
+        version="1.15.0"
+        viewmodes="maximized">
+
+    <tizen:application id="HV9K26T901.HVTV" package="HV9K26T901" required_version="2.3"/>
+
+    <name>H&amp;M Player</name>
+    <content src="index.html"/>
+    <icon src="icon.png"/>
+
+    <access origin="*" subdomains="true"/>
+    <tizen:allow-navigation>*</tizen:allow-navigation>
+
+    <tizen:content-security-policy>
+      default-src * data: blob: 'self' 'unsafe-inline' 'unsafe-eval';
+      script-src * 'self' 'unsafe-inline' 'unsafe-eval';
+      style-src * 'self' 'unsafe-inline';
+      connect-src *;
+      media-src * data: blob:;
+      img-src * data: blob:;
+      font-src * data:;
+    </tizen:content-security-policy>
+
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <feature name="http://tizen.org/feature/network.internet"/>
+
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.display"/>
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.write"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
+
+    <tizen:metadata key="http://samsung.com/tv/metadata/prelaunch.support" value="false"/>
+
+    <tizen:profile name="tv-samsung"/>
+    <tizen:setting screen-orientation="landscape"
+                   context-menu="disable"
+                   background-support="disable"
+                   encryption="disable"
+                   install-location="auto"
+                   hwkey-event="enable"/>
+</widget>

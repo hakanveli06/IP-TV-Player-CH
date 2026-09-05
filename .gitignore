@@ -1,0 +1,15 @@
+# Build and release outputs
+dist/
+*.wgt
+*_Paylasim.zip
+
+# Local diagnostics, downloaded media and logs
+.codex-diagnostics/
+Sugar_*_Testleri_*.zip
+*.log
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

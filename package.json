@@ -1,0 +1,10 @@
+{
+  "name": "hm-player-tizen",
+  "private": true,
+  "version": "1.15.0",
+  "scripts": {
+    "test": "node tools/test.js && node tools/test-strategy.js && node tools/test-preflight.js && node tools/test-accounts.js && node tools/test-range-discipline.js && node tools/test-subtitle-recovery.js && node tools/test-subtitle-ui.js && node tools/test-preview.js && node tools/test-final-features.js",
+    "build": "node tools/build.js",
+    "verify": "node tools/verify.js"
+  }
+}
