@@ -28,7 +28,7 @@ npm run build
 npm run verify
 ```
 
-`npm run build` çıktıyı `dist/` altında oluşturur. Paylaşım için temel WGT ve ZIP de üretmek isterseniz:
+`npm run build` çıktıyı `dist/` altında oluşturur. Depodaki `dist/` arşivinde v1.12.0 ve üzerindeki hazır WGT paketleri de bulunur. Paylaşım için temel WGT ve ZIP üretmek isterseniz:
 
 ```powershell
 node tools/build.js --share

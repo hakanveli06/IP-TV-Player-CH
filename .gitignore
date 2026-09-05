@@ -1,7 +1,12 @@
 # Build and release outputs
-dist/
-*.wgt
-*_Paylasim.zip
+# Kok dizindeki Apps2Samsung/paylasim kopyalari yerel kalir.
+/*.wgt
+/*_Paylasim.zip
+
+# dist arsivinde v1.12 ve sonraki v1.x paketleri takip edilir.
+dist/*
+!dist/HM_Player_v1.1[2-9]*.wgt
+!dist/HM_Player_v1.[2-9][0-9]*.wgt
 
 # Local diagnostics, downloaded media and logs
 .codex-diagnostics/
