@@ -3,6 +3,39 @@
 
 var Views = {};
 
+/* ============================ ILK KURULUM DILI ============================ */
+
+Views.languageSetup = function (opts) {
+  opts = opts || {};
+  var host = document.getElementById('screen');
+  document.getElementById('rail').className = 'hidden';
+  host.innerHTML = '<div class="screen language-screen"><div class="language-card">' +
+    '<div class="brand">H&amp;M Player<b>.</b></div><div class="page-title">' + esc(t('language.title')) + '</div>' +
+    '<div class="page-sub">' + esc(t('language.help')) + '</div><div class="language-list" id="language-list"></div>' +
+    '<div class="language-hint">' + esc(t('language.autoHint')) + '</div></div></div>';
+  var wrap = document.getElementById('language-list'), nodes = [];
+  for (var i = 0; i < I18n.languages.length; i++) {
+    var item = I18n.languages[i];
+    var node = el('div', 'btn language-choice', esc(item.name));
+    node.setAttribute('data-language', item.code); wrap.appendChild(node); nodes.push(node);
+  }
+  var current = Settings.get('uiLanguage') || 'auto', start = 0;
+  for (i = 0; i < I18n.languages.length; i++) if (I18n.languages[i].code === current) start = i;
+  var stack = new Stack({
+    id: 'language', nodes: nodes,
+    onSelect: function (node) {
+      Settings.set('uiLanguage', node.getAttribute('data-language'));
+      Settings.set('languageChosen', true); I18n.apply();
+      if (opts.initial) Views.login({ add: true, initial: true, fromLanguage: true });
+      else window.location.reload();
+    }
+  });
+  stack.index = start;
+  Nav.setScreen({ zones: { language: stack }, start: 'language', onBack: function () {
+    if (opts.initial) App.confirmExit(); else App.go('settings');
+  } });
+};
+
 /* =============================== GIRIS =============================== */
 
 Views.login = function (opts) {
@@ -13,22 +46,21 @@ Views.login = function (opts) {
   host.innerHTML =
     '<div class="screen"><div id="login-wrap"><div class="login">' +
     '<div class="brand">H&amp;M Player<b>.</b></div>' +
-    '<div class="hint">' + (editing
-      ? 'Profili guncelleyin. Sifreyi bos birakirsaniz mevcut sifre korunur. Sunucu veya kullanici degisirse eski icerik kayitlari yeni hesaba karistirilmaz.'
-      : 'Xtream hesap bilgilerinizi girin. Profil adi istege baglidir.') + '</div>' +
-    '<div class="field"><label>Profil adi (istege bagli)</label>' +
-    '<input id="f-name" type="text" autocomplete="off" placeholder="Ornek: Ev hesabi" value="' + esc(saved.name || '') + '"></div>' +
-    '<div class="field"><label>Sunucu adresi</label>' +
-    '<input id="f-server" type="text" placeholder="Panel adresi veya tam M3U baglantisi" value="' + esc(saved.server || '') + '"></div>' +
-    '<div class="field"><label>Kullanici adi</label>' +
+    '<div class="page-sub login-title">' + esc(t(editing ? 'login.editTitle' : 'login.addTitle')) + '</div>' +
+    '<div class="hint">' + esc(t(editing ? 'login.editHint' : 'login.addHint')) + '</div>' +
+    '<div class="field"><label>' + esc(t('login.profile')) + '</label>' +
+    '<input id="f-name" type="text" autocomplete="off" placeholder="' + esc(t('login.profilePlaceholder')) + '" value="' + esc(saved.name || '') + '"></div>' +
+    '<div class="field"><label>' + esc(t('login.server')) + '</label>' +
+    '<input id="f-server" type="text" placeholder="' + esc(t('login.serverPlaceholder')) + '" value="' + esc(saved.server || '') + '"></div>' +
+    '<div class="field"><label>' + esc(t('login.username')) + '</label>' +
     '<input id="f-user" type="text" value="' + esc(saved.username || '') + '"></div>' +
-    '<div class="field"><label>Sifre</label>' +
+    '<div class="field"><label>' + esc(t('login.password')) + '</label>' +
     '<input id="f-pass" type="password" autocomplete="off" placeholder="' +
-    (editing ? 'Mevcut sifreyi korumak icin bos birakin' : '') + '" value=""></div>' +
-    '<div class="btn password-toggle" id="f-show">' + uiIcon('eye') + '<span>Sifreyi goster</span></div>' +
+    (editing ? esc(t('login.keepPassword')) : '') + '" value=""></div>' +
+    '<div class="btn password-toggle" id="f-show">' + uiIcon('eye') + '<span>' + esc(t('login.showPassword')) + '</span></div>' +
     '<div class="err" id="f-err"></div>' +
     '<div class="btnrow"><div class="btn primary" id="f-go">' +
-    (editing ? 'Dogrula ve kaydet' : 'Hesabi dogrula ve ekle') + '</div></div>' +
+    esc(t(editing ? 'login.update' : 'login.add')) + '</div></div>' +
     '</div></div></div>';
 
   document.getElementById('rail').className = 'hidden';
@@ -47,14 +79,14 @@ Views.login = function (opts) {
     var visible = input.type === 'text';
     input.type = visible ? 'password' : 'text';
     button.innerHTML = uiIcon(visible ? 'eye' : 'eyeoff') +
-      '<span>' + (visible ? 'Sifreyi goster' : 'Sifreyi gizle') + '</span>';
+      '<span>' + esc(t(visible ? 'login.showPassword' : 'login.hidePassword')) + '</span>';
   }
 
   function submit() {
     var name = nodes[0].value, s = nodes[1].value, u = nodes[2].value, p = nodes[3].value;
     if (editing && !p) p = saved.password || '';
     var errEl = document.getElementById('f-err');
-    if (!s || !u || !p) { errEl.textContent = 'Ucu de doldurulmali.'; return; }
+    if (!s || !u || !p) { errEl.textContent = t('login.required'); return; }
     errEl.textContent = '';
     UI.spin(true);
     Api.validateCredentials(s, u, p).then(function (info) {
@@ -63,7 +95,7 @@ Views.login = function (opts) {
       App.saveAccountForm({ name: name, server: s, username: u, password: p }, info, opts);
     })['catch'](function (e) {
       UI.spin(false);
-      errEl.textContent = e.message || 'Giris basarisiz.';
+      errEl.textContent = e.message || t('login.failed');
     });
   }
 
@@ -83,7 +115,8 @@ Views.login = function (opts) {
       if (Accounts.list().length) {
         if (Api.info && !opts.standalone) App.go('accounts');
         else Views.accounts({ standalone: true });
-      } else App.confirmExit();
+      } else if (opts.initial && opts.fromLanguage) Views.languageSetup({ initial: true });
+      else App.confirmExit();
     }
   });
 };
@@ -195,17 +228,17 @@ Views.live = function () {
     '<div class="screen">' +
     '<div class="section-tools"><div class="section-search" id="lv-search-wrap">' +
     '<span class="search-ic">' + uiIcon('search') + '</span><input id="lv-search" type="text" autocomplete="off" ' +
-    'placeholder="Tum canli kanallarda ara (en az 3 harf)"></div>' +
+    'placeholder="' + esc(t('live.search')) + '"></div>' +
     '<div class="search-state" id="lv-search-state"></div></div>' +
     '<div class="cols" style="height:calc(1080px - var(--overscan) - 110px)">' +
-    '<div class="col col-cats"><div class="col-head"><span>Kategoriler</span></div>' +
+    '<div class="col col-cats"><div class="col-head"><span>' + esc(t('live.categories')) + '</span></div>' +
     '<div class="listbox" id="lv-cats"></div></div>' +
-    '<div class="col col-list"><div class="col-head"><span id="lv-title">Kanallar</span>' +
+    '<div class="col col-list"><div class="col-head"><span id="lv-title">' + esc(t('live.channels')) + '</span>' +
     '<span id="lv-count"></span></div><div class="listbox" id="lv-chans"></div></div>' +
-    '<div class="col col-info"><div class="col-head"><span>Yayin akisi</span></div>' +
+    '<div class="col col-info"><div class="col-head"><span>' + esc(t('live.epg')) + '</span></div>' +
     '<div class="info live-info-panel"><div id="lv-preview" class="live-preview-slot">' +
     '<span>' + livePreviewHelp + '</span></div><div id="lv-playing" class="preview-caption"></div>' +
-    '<div id="lv-info"><div class="empty">Kanal secin</div></div></div></div>' +
+    '<div id="lv-info"><div class="empty">' + esc(t('live.select')) + '</div></div></div></div>' +
     '</div></div>';
 
   var cats = new List({
@@ -217,7 +250,7 @@ Views.live = function () {
     onFocus: function (c) { if (c) App.live.loadCategory(c); },
     onSelect: function () { Nav.focus('chans'); }
   });
-  cats.emptyText = 'Kategori yok';
+  cats.emptyText = t('live.noCategory');
 
   var chans = new List({
     id: 'chans', el: document.getElementById('lv-chans'), rowH: 76,
@@ -234,11 +267,11 @@ Views.live = function () {
     onSelect: function (c, i) { App.live.open(i); },
     onAltSelect: function (c) {
       var on = Favs.toggle('live', c.stream_id);
-      UI.toast(on ? 'Favorilere eklendi' : 'Favorilerden cikarildi');
+      UI.toast(on ? t('favs.added') : t('favs.removed'));
       chans.draw();
     }
   });
-  chans.emptyText = 'Bu kategoride kanal yok';
+  chans.emptyText = t('live.noChannel');
   chans.key = function (item) { return item && item.stream_id; };
 
   App.live.cats = cats;
@@ -279,15 +312,15 @@ Views.live = function () {
 
 function gridScreen(kind, opts) {
   var host = document.getElementById('screen');
-  var title = kind === 'movie' ? 'Filmler' : 'Diziler';
+  var title = t(kind === 'movie' ? 'rail.movies' : 'rail.series');
   host.innerHTML =
     '<div class="screen">' +
     '<div class="section-tools"><div class="section-search" id="g-search-wrap">' +
     '<span class="search-ic">' + uiIcon('search') + '</span><input id="g-search" type="text" autocomplete="off" ' +
-    'placeholder="Tum ' + (kind === 'movie' ? 'filmlerde' : 'dizilerde') + ' ara (en az 3 harf)"></div>' +
+    'placeholder="' + esc(t(kind === 'movie' ? 'library.movieSearch' : 'library.seriesSearch')) + '"></div>' +
     '<div class="search-state" id="g-search-state"></div></div>' +
     '<div class="cols" style="height:calc(1080px - var(--overscan) - 110px)">' +
-    '<div class="col col-cats"><div class="col-head"><span>Kategoriler</span></div>' +
+    '<div class="col col-cats"><div class="col-head"><span>' + esc(t('live.categories')) + '</span></div>' +
     '<div class="listbox" id="g-cats"></div></div>' +
     '<div class="col col-list"><div class="col-head"><span id="g-title">' + title + '</span>' +
     '<span id="g-count"></span></div><div class="listbox" id="g-grid" ' +
@@ -303,7 +336,7 @@ function gridScreen(kind, opts) {
     onFocus: function (c) { if (c) state.loadCategory(c); },
     onSelect: function () { Nav.focus('grid'); }
   });
-  cats.emptyText = 'Kategori yok';
+  cats.emptyText = t('live.noCategory');
 
   var grid = new Grid({
     id: 'grid', el: document.getElementById('g-grid'), cols: 4, rowH: 404,
@@ -324,11 +357,11 @@ function gridScreen(kind, opts) {
     onAltSelect: function (m) {
       var id = kind === 'movie' ? m.stream_id : m.series_id;
       var on = Favs.toggle(kind, id);
-      UI.toast(on ? 'Favorilere eklendi' : 'Favorilerden cikarildi');
+      UI.toast(on ? t('favs.added') : t('favs.removed'));
       grid.draw();
     }
   });
-  grid.emptyText = 'Bu kategoride icerik yok';
+  grid.emptyText = t('library.noContent');
 
   state.cats = cats;
   state.grid = grid;
@@ -349,7 +382,10 @@ function gridScreen(kind, opts) {
   Nav.setScreen({
     zones: { rail: App.rail, searchbox: searchbox, cats: cats, grid: grid },
     start: 'cats',
-    onBack: function () { App.backToRailOrExit(); }
+    onBack: function () {
+      if (state.searchQuery.length >= 3) { state.clearSearchResults(); return; }
+      App.backToRailOrExit();
+    }
   });
 
   state.init();
@@ -364,7 +400,7 @@ Views.favs = function () {
   var host = document.getElementById('screen');
   host.innerHTML =
     '<div class="screen">' +
-    '<div class="page-title">Favoriler</div>' +
+    '<div class="page-title">' + esc(t('rail.favs')) + '</div>' +
     '<div class="cols" style="height:calc(1080px - 40px - 90px)">' +
     '<div class="col col-list"><div class="listbox" id="fv-list"></div></div>' +
     '<div class="col col-info"><div class="info" id="fv-info"><div class="empty">Oge secin</div></div></div>' +
@@ -383,11 +419,11 @@ Views.favs = function () {
     onSelect: function (it) { App.favs.open(it); },
     onAltSelect: function (it) {
       Favs.toggle(it.kind, it.id);
-      UI.toast('Favorilerden cikarildi');
+      UI.toast(t('favs.removed'));
       App.favs.load();
     }
   });
-  list.emptyText = 'Henuz favori yok.\nListelerde sari tusla favori ekleyebilirsiniz.';
+  list.emptyText = t('favs.empty');
 
   App.favs.list = list;
 
@@ -407,13 +443,13 @@ Views.recent = function () {
   host.innerHTML =
     '<div class="screen">' +
     '<div style="display:flex;align-items:center;justify-content:space-between">' +
-    '<div class="page-title">Son İzlediklerim <span class="page-count" id="rc-count"></span></div>' +
-    '<div class="btn" id="rc-clear">Tümünü temizle</div></div>' +
+    '<div class="page-title">' + esc(t('rail.recent')) + ' <span class="page-count" id="rc-count"></span></div>' +
+    '<div class="btn" id="rc-clear">' + esc(t('recent.clear')) + '</div></div>' +
     '<div class="cols" style="height:calc(1080px - 40px - 100px)">' +
-    '<div class="col col-list"><div class="col-head"><span>En yeni izlenenler</span>' +
-    '<span>Sarı tuş: kaldır</span></div><div class="listbox" id="rc-list"></div></div>' +
-    '<div class="col col-info"><div class="col-head"><span>İçerik</span></div>' +
-    '<div class="info" id="rc-info"><div class="empty">İçerik seçin</div></div></div>' +
+    '<div class="col col-list"><div class="col-head"><span>' + esc(t('recent.newest')) + '</span>' +
+    '<span>' + esc(t('recent.removeHint')) + '</span></div><div class="listbox" id="rc-list"></div></div>' +
+    '<div class="col col-info"><div class="col-head"><span>' + esc(t('recent.content')) + '</span></div>' +
+    '<div class="info" id="rc-info"><div class="empty">' + esc(t('recent.content')) + '</div></div></div>' +
     '</div></div>';
 
   var clearNode = document.getElementById('rc-clear');
@@ -439,7 +475,7 @@ Views.recent = function () {
     onSelect: function (it) { App.recent.open(it); },
     onAltSelect: function (it) { App.recent.remove(it); }
   });
-  list.emptyText = 'Henüz izlenen film veya dizi yok.';
+  list.emptyText = t('recent.empty');
 
   App.recent.list = list;
   App.recent.bar = bar;
@@ -515,7 +551,7 @@ Views.settings = function () {
   var host = document.getElementById('screen');
   host.innerHTML =
     '<div class="screen settings-screen">' +
-    '<div class="page-title">Ayarlar</div>' +
+    '<div class="page-title">' + esc(t('settings.title')) + '</div>' +
     '<div class="settings-layout"><div class="settings-list"><div class="btnrow" id="st-btns"></div></div>' +
     '<div class="settings-help info" id="st-help"></div>' +
     '</div></div>';
@@ -532,11 +568,11 @@ Views.settings = function () {
   function showHelp(index) {
     var def = defs[index] || defs[0], box = document.getElementById('st-help');
     if (!def || !box) return;
-    box.innerHTML = '<div class="settings-help-kicker">Bu ayar ne işe yarar?</div><h2>' +
+    box.innerHTML = '<div class="settings-help-kicker">' + esc(t('settings.what')) + '</div><h2>' +
       esc(def.title || def.label()) + '</h2><div class="settings-help-copy">' +
-      esc(def.help || 'Seçeneği değiştirmek veya açmak için OK tuşuna basın.') + '</div>' +
-      (def.recommended ? '<div class="settings-recommended"><b>Önerilen</b><br>' + esc(def.recommended) + '</div>' : '') +
-      '<div class="settings-help-footer">OK: Seç / Değiştir&nbsp;&nbsp; · &nbsp;&nbsp;Geri: Ana menü</div>';
+      esc(def.help || t('settings.selectHelp')) + '</div>' +
+      (def.recommended ? '<div class="settings-recommended"><b>' + esc(t('common.recommended')) + '</b><br>' + esc(def.recommended) + '</div>' : '') +
+      '<div class="settings-help-footer">' + esc(t('settings.footer')) + '</div>';
   }
 
   var stack = new Stack({
@@ -556,6 +592,122 @@ Views.settings = function () {
     onBack: function () { App.backToRailOrExit(); }
   });
   showHelp(0);
+};
+
+Views.languageSettings = function () { Views.languageSetup({ initial: false }); };
+
+Views.regionSettings = function () {
+  var host = document.getElementById('screen');
+  host.innerHTML = '<div class="screen region-screen"><div class="page-title">' + esc(t('tmdb.regionTitle')) + '</div>' +
+    '<div class="page-sub">' + esc(t('tmdb.regionHelp')) + '</div><div class="region-layout">' +
+    '<div class="region-list" id="region-list"></div><div class="info region-help">' +
+    '<h2>' + esc(t('tmdb.region')) + '</h2><div class="settings-help-copy">' + esc(t('tmdb.regionAutoHint')) +
+    '</div></div></div></div>';
+  var wrap = document.getElementById('region-list'), nodes = [];
+  for (var i = 0; i < I18n.regions.length; i++) {
+    var row = I18n.regions[i], node = el('div', 'btn', esc(I18n.regionName(row.code)));
+    node.setAttribute('data-region', row.code); wrap.appendChild(node); nodes.push(node);
+  }
+  var selected = Settings.get('contentRegion') || 'auto', start = 0;
+  for (i = 0; i < I18n.regions.length; i++) if (I18n.regions[i].code === selected) start = i;
+  var stack = new Stack({ id: 'list', nodes: nodes, neighbors: { left: 'rail' }, onSelect: function (node) {
+    Settings.set('contentRegion', node.getAttribute('data-region'));
+    Tmdb.clearLocaleCache(); UI.toast(t('tmdb.regionSaved')); Views.tmdbSettings();
+  } });
+  stack.index = start;
+  Nav.setScreen({ zones: { rail: App.rail, list: stack }, start: 'list', onBack: function () { Views.tmdbSettings(); } });
+};
+
+/* =========================== TMDB YAPILANDIRMASI =========================== */
+
+Views.tmdbSettings = function () {
+  var host = document.getElementById('screen');
+  var saved = Tmdb.userCredential();
+  var family = !!Tmdb.embeddedToken();
+  var chosenRegion = Settings.get('contentRegion') || 'auto';
+  host.innerHTML = '<div class="screen tmdb-settings-screen"><div class="page-title">' + esc(t('tmdb.title')) + '</div>' +
+    '<div class="tmdb-settings-layout"><div class="tmdb-settings-form">' +
+    '<div class="tmdb-settings-status ' + (Tmdb.configured() ? 'ready' : '') + '" id="tmdb-setting-status">' +
+    esc(Tmdb.sourceLabel()) + '</div>' +
+    '<div class="field"><label>' + esc(t('tmdb.credential')) + '</label>' +
+    '<input id="tmdb-key" type="password" autocomplete="off" value="' + esc(saved) + '" ' +
+    'placeholder="' + esc(t('tmdb.placeholder')) + '"></div>' +
+    '<div class="btn password-toggle" id="tmdb-show">' + uiIcon('eye') + '<span>' + esc(t('tmdb.showKey')) + '</span></div>' +
+    '<div class="btn tmdb-region-button" id="tmdb-region">' + esc(t('tmdb.region')) + ': <b>' +
+    esc(I18n.regionName(chosenRegion)) + '</b></div>' +
+    '<div class="err" id="tmdb-error"></div><div class="tmdb-settings-actions">' +
+    '<div class="btn primary" id="tmdb-save">' + esc(t('common.saveTest')) + '</div>' +
+    '<div class="btn" id="tmdb-clear">' + esc(t('tmdb.clear')) + '</div>' +
+    '<div class="btn" id="tmdb-back">' + esc(t('tmdb.backSettings')) + '</div></div></div>' +
+    '<div class="info tmdb-settings-help"><h2>' + esc(t('tmdb.why')) + '</h2>' +
+    '<div class="tmdb-settings-copy tmdb-benefits">' + esc(t('tmdb.benefits')) + '<br><br>' + esc(t('tmdb.optional')) + '</div>' +
+    '<h2 class="tmdb-how-title">' + esc(t('tmdb.how')) + '</h2><div class="tmdb-settings-copy">' +
+    esc(t('tmdb.steps')) + '<br><br>' +
+    '<span class="tmdb-settings-url">www.themoviedb.org/settings/api</span><br><br>' +
+    esc(t('tmdb.private')) + '</div>' +
+    (family ? '<div class="settings-recommended"><b>' + esc(t('tmdb.family')) + '</b><br>' + esc(t('tmdb.familyReady')) + '</div>' :
+      '<div class="settings-recommended"><b>' + esc(t('tmdb.public')) + '</b><br>' + esc(t('tmdb.publicInfo')) + '</div>') +
+    '</div></div></div>';
+
+  var input = document.getElementById('tmdb-key');
+  var show = document.getElementById('tmdb-show');
+  var region = document.getElementById('tmdb-region');
+  var save = document.getElementById('tmdb-save');
+  var clear = document.getElementById('tmdb-clear');
+  var back = document.getElementById('tmdb-back');
+  var error = document.getElementById('tmdb-error');
+  var status = document.getElementById('tmdb-setting-status');
+  var busy = false;
+
+  function paintStatus(message, ok) {
+    status.className = 'tmdb-settings-status' + (ok ? ' ready' : '');
+    status.textContent = message;
+  }
+  function toggle() {
+    var visible = input.type === 'text';
+    input.type = visible ? 'password' : 'text';
+    show.innerHTML = uiIcon(visible ? 'eye' : 'eyeoff') +
+      '<span>' + esc(t(visible ? 'tmdb.showKey' : 'tmdb.hideKey')) + '</span>';
+  }
+  function saveAndTest() {
+    if (busy) return;
+    var value = Tmdb.normalizeCredential(input.value);
+    error.textContent = '';
+    if (!value) { error.textContent = t('tmdb.enterFirst'); return; }
+    busy = true; UI.spin(true); paintStatus(t('tmdb.testing'), false);
+    Tmdb.testCredential(value).then(function () {
+      busy = false; UI.spin(false); Settings.set('tmdbCredential', value);
+      paintStatus(t('tmdb.success'), true);
+      input.type = 'password'; show.innerHTML = uiIcon('eye') + '<span>' + esc(t('tmdb.showKey')) + '</span>';
+      UI.toast(t('tmdb.saved'));
+    })['catch'](function (e) {
+      busy = false; UI.spin(false); paintStatus(Tmdb.sourceLabel(), Tmdb.configured());
+      error.textContent = e.message || t('tmdb.failed');
+    });
+  }
+  function clearPersonal() {
+    if (busy) return;
+    Settings.set('tmdbCredential', ''); input.value = ''; input.type = 'password';
+    show.innerHTML = uiIcon('eye') + '<span>' + esc(t('tmdb.showKey')) + '</span>';
+    error.textContent = ''; paintStatus(Tmdb.sourceLabel(), Tmdb.configured());
+    UI.toast(family ? t('tmdb.familyFallback') : t('tmdb.cleared'));
+  }
+  function goBack() { input.type = 'password'; App.go('settings'); }
+
+  show.addEventListener('click', toggle);
+  region.addEventListener('click', function () { Views.regionSettings(); });
+  save.addEventListener('click', saveAndTest);
+  clear.addEventListener('click', clearPersonal);
+  back.addEventListener('click', goBack);
+  var nodes = [input, show, region, save, clear, back];
+  var stack = new Stack({
+    id: 'list', nodes: nodes, neighbors: { left: 'rail' },
+    onSelect: function (node, index) {
+      if (index === 1) toggle(); else if (index === 2) Views.regionSettings();
+      else if (index === 3) saveAndTest(); else if (index === 4) clearPersonal(); else if (index === 5) goBack();
+    }
+  });
+  Nav.setScreen({ zones: { rail: App.rail, list: stack }, start: 'list', onBack: goBack });
 };
 
 /* ===================== KATEGORI GOSTER / GIZLE ===================== */
@@ -657,9 +809,9 @@ Views.favoriteOrder = function () {
 Views.remoteGuide = function () {
   var host = document.getElementById('screen');
   var sections = [
-    { title: 'Canlı TV listesi', body: 'OK: HTML5 seçiliyken küçük ön izleme; AVPlay seçiliyken doğrudan tam ekran.<br>Sağ: Seçili kanalın bugünkü yayın akışı.<br>Sarı: Favoriye ekle veya çıkar.<br>Kanal tuşları: Listede sayfa atla.' },
-    { title: 'Canlı TV tam ekran', body: 'Yukarı/Aşağı veya kanal tuşları: Önceki/sonraki kanal.<br>Sol: Son iki kanal arasında geçiş.<br>Sağ: Son izlenen sekiz kanal.<br>OK: Kanal listesi.<br>Geri: Kanal listesine veya ön izlemeye dön.' },
-    { title: 'Film ve dizi', body: 'OK veya Oynat/Duraklat: Oynatmayı duraklat veya sürdür.<br>Sol/Sağ: 10 saniye geri / 30 saniye ileri.<br>Yukarı: Oynatıcı menüsü.<br>Aşağı: İçerik bilgisi.<br>Geri: Önce menüyü kapatır, sonra içeriğe döner.' },
+    { title: 'Canlı TV listesi', body: 'OK: Kanalı sağdaki küçük pencerede ön izle; oynayan kanalda tekrar OK: Tam ekran.<br>Sağ: Seçili kanalın bugünkü yayın akışı.<br>Sarı: Favoriye ekle veya çıkar.<br>Kanal tuşları: Listede sayfa atla.' },
+    { title: 'Canlı TV tam ekran', body: 'Kanal tuşları: Önceki/sonraki kanal.<br>Sol: Son iki kanal arasında geçiş.<br>Sağ: Son izlenen sekiz kanal.<br>Yukarı: Kanal ve temel teknik bilgi kartı.<br>Aşağı: Bugünkü yayın akışı.<br>OK veya Geri: Ön izlemeli kanal ekranına dön.<br>INFO: Ayrıntılı teknik bilgi ve teşhis.' },
+    { title: 'Film ve dizi', body: 'OK veya Oynat/Duraklat: Oynatmayı duraklat veya sürdür.<br>Sol/Sağ: 10 saniye geri / 30 saniye ileri.<br>Yukarı: Ses/altyazı, yazı boyutu, görüntü biçimi ve motor menüsü.<br>Motor seçimi yalnızca açık içeriği AVPlay/HTML5 arasında değiştirir.<br>Aşağı: İçerik bilgisi.<br>Geri: Önce menüyü kapatır, sonra içeriğe döner.' },
     { title: 'Ses ve altyazı', body: 'Film veya dizi oynarken Yukarı ile menüyü açın.<br>Ses ya da Altyazı alanına yön tuşlarıyla gidip OK ile seçin.<br>Bozuk TX3G kaynağında uygulama altyazıyı güvenli biçimde hazırlayabilir.' },
     { title: 'Genel kullanım', body: 'Geri: Bir önceki ekrana döner.<br>Ana ekranda Geri: Uygulamadan çıkış onayı.<br>INFO: Oynatma ve bağlantı bilgileri.<br>Ev tuşu: Samsung ana ekranı.' }
   ];
@@ -685,15 +837,17 @@ Views.about = function () {
   var host = document.getElementById('screen');
   host.innerHTML =
     '<div class="screen about-screen">' +
-    '<div class="page-title">Hakkında</div>' +
+    '<div class="page-title">' + esc(t('about.title')) + '</div>' +
     '<div class="about-card">' +
     '<img class="about-logo" src="./icon.png" alt="H&amp;M IP TV">' +
     '<div class="about-copy"><div class="about-brand">H&amp;M</div>' +
     '<div class="about-product">H&amp;M Player</div>' +
-    '<div class="about-credit">Hakan Veli tarafından geliştirilmiştir.</div>' +
+    '<div class="about-credit">' + esc(t('about.credit')) + '</div>' +
     '<div class="about-mail">hakanveli@gmail.com</div>' +
     '<div class="about-version">' + esc(App.versionLabel) + '</div>' +
-    '<div class="btn" id="about-back">Menüye dön</div></div></div></div>';
+    '<div class="tmdb-attribution"><img class="tmdb-wordmark" src="./assets/tmdb-logo.svg" alt="TMDB">' +
+    '<span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span></div>' +
+    '<div class="btn" id="about-back">' + esc(t('about.menu')) + '</div></div></div></div>';
 
   var actions = new Stack({
     id: 'btns', nodes: [document.getElementById('about-back')],
@@ -719,7 +873,7 @@ Views.detail = function (kind, item, info) {
   var line = [];
   if (meta.releasedate || meta.releaseDate) line.push(String(meta.releasedate || meta.releaseDate).slice(0, 4));
   if (meta.genre) line.push(meta.genre);
-  if (meta.rating) line.push('Puan ' + meta.rating);
+  if (meta.rating) line.push(t('detail.rating') + ' ' + meta.rating);
   if (isMovie && meta.duration) line.push(meta.duration);
 
   host.innerHTML =
@@ -741,18 +895,22 @@ Views.detail = function (kind, item, info) {
 
   if (isMovie) {
     var r = Resume.get('movie', id);
-    if (r) actions.push({ label: 'Devam et (' + mmss(r.pos) + ')', run: function () { App.detail.playMovie(item, info, r.pos); } });
-    actions.push({ label: r ? 'Bastan oynat' : 'Oynat', run: function () { App.detail.playMovie(item, info, 0); } });
+    if (r) actions.push({ label: t('detail.resume') + ' (' + mmss(r.pos) + ')', run: function () { App.detail.playMovie(item, info, r.pos); } });
+    actions.push({ label: r ? t('detail.restart') : t('detail.play'), run: function () { App.detail.playMovie(item, info, 0); } });
   }
   actions.push({
-    label: Favs.has(kind, id) ? 'Favoriden cikar' : 'Favorilere ekle',
+    label: t('detail.ratings'),
+    run: function () { App.tmdb.show(kind, item, info); }
+  });
+  actions.push({
+    label: Favs.has(kind, id) ? t('detail.removeFav') : t('detail.addFav'),
     run: function () {
       var on = Favs.toggle(kind, id);
-      UI.toast(on ? 'Favorilere eklendi' : 'Favorilerden cikarildi');
-      btns.nodes[btns.index].innerHTML = on ? 'Favoriden cikar' : 'Favorilere ekle';
+      UI.toast(on ? t('favs.added') : t('favs.removed'));
+      btns.nodes[btns.index].innerHTML = on ? t('detail.removeFav') : t('detail.addFav');
     }
   });
-  actions.push({ label: 'Geri', run: function () { App.back(); } });
+  actions.push({ label: t('common.back'), run: function () { App.back(); } });
 
   var nodes = [];
   for (var i = 0; i < actions.length; i++) {
@@ -773,8 +931,8 @@ Views.detail = function (kind, item, info) {
     var body = document.getElementById('d-body');
     body.innerHTML =
       '<div class="col" style="width:260px;flex:0 0 260px;margin-right:24px">' +
-      '<div class="col-head">Sezon</div><div class="listbox" id="d-seasons"></div></div>' +
-      '<div class="col" style="flex:1"><div class="col-head">Bolumler</div>' +
+      '<div class="col-head">' + esc(t('detail.season')) + '</div><div class="listbox" id="d-seasons"></div></div>' +
+      '<div class="col" style="flex:1"><div class="col-head">' + esc(t('detail.episodes')) + '</div>' +
       '<div class="listbox" id="d-eps"></div></div>';
 
     var episodes = (info && info.episodes) || {};

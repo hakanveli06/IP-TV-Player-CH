@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="http://hakanveli.com/apps/hvtv-hv9k26t901"
-        version="1.15.0"
+        version="1.21.0"
         viewmodes="maximized">
 
     <tizen:application id="HV9K26T901.HVTV" package="HV9K26T901" required_version="2.3"/>

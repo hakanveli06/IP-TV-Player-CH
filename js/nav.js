@@ -350,7 +350,6 @@ var Nav = {
     }
 
     if (code === KEY.ENTER) { e.preventDefault(); if (this.zone) this.zone.select(); return; }
-    if (code === KEY.BLUE) { e.preventDefault(); Diag.toggle(); return; }
     if (code === KEY.YELLOW) { e.preventDefault(); if (this.zone) this.zone.altSelect(); return; }
 
     if (code === KEY.CH_UP) { e.preventDefault(); if (this.zone && this.zone.page) this.zone.page(-1); return; }

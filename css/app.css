@@ -48,11 +48,25 @@ body.playing #html5player.on { display:block; }
 body.playing { background:transparent; }
 body.playing #app { display:none; }
 body.playing.live-preview #app { display:flex; }
-/* Küçük ön izleme yalnızca HTML5 video ile kullanılır. */
+/* HTML5 video DOM katmaninda dogrudan pencereye tasinir. */
 body.live-preview #html5player.on { z-index:11; box-shadow:none; }
-.live-preview-slot { height:180px; width:100%; display:flex; align-items:center;
+/* 506x285, mevcut sag sutunun tam 16:9'a en yakin tam sayili alanidir. */
+.live-preview-slot { height:285px; width:100%; flex:0 0 285px; display:flex; align-items:center;
   justify-content:center; background:var(--panel-2); color:var(--muted); font-size:19px;
-  line-height:1.45; text-align:center; padding:18px; }
+  line-height:1.45; text-align:center; padding:18px; overflow:hidden; }
+/* AVPlay nesnesi tam ekran kalir; donanimsal setDisplayRect bu seffaf 16:9
+   acikliga yoneltilir. Dev golge aciklik disindaki bilgi panelini boyar. */
+body.av-preview .live-info-panel { background:transparent; }
+body.av-preview .live-preview-slot {
+  position:relative; padding:0; background:transparent;
+  box-shadow:0 0 0 2000px var(--panel);
+}
+/* Yaygin golge yalnizca video deliginin disini boyar. EPG ve oynayan kanal
+   metinleri ayri opak katmanda onun ustunde kalir. */
+body.av-preview .preview-caption,
+body.av-preview .live-info-panel #lv-info {
+  position:relative; z-index:2; background:var(--panel);
+}
 .live-preview-slot b { color:var(--text); font-size:20px; }
 .live-preview-slot em { color:var(--accent); font-style:normal; }
 .preview-caption { font-size:19px; color:var(--text); margin:24px 0 0; }
@@ -291,6 +305,13 @@ body.live-preview #html5player.on { z-index:11; box-shadow:none; }
 .about-credit { color:#C3D0DA; font-size:25px; line-height:1.5; margin-bottom:16px; }
 .about-mail { color:var(--accent); font-size:25px; margin-bottom:30px; }
 .about-version { color:var(--muted); font-size:18px; margin-bottom:30px; letter-spacing:1px; }
+.tmdb-attribution {
+  display:flex; align-items:center; max-width:590px; margin:-12px 0 30px;
+  color:var(--muted); font-size:14px; line-height:1.35;
+}
+.tmdb-wordmark {
+  width:137px; height:auto; flex:0 0 137px; margin-right:14px;
+}
 
 /* ---------------- Giris ekrani ---------------- */
 
@@ -361,6 +382,35 @@ body.live-preview #html5player.on { z-index:11; box-shadow:none; }
 .settings-recommended b { color:var(--accent); }
 .settings-help-footer { border-top:1px solid var(--line); margin-top:34px; padding-top:20px; color:var(--muted); font-size:17px; }
 
+.tmdb-settings-layout { display:flex; height:830px; gap:38px; }
+.tmdb-settings-form { width:880px; flex:0 0 880px; padding:28px 34px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.tmdb-settings-status { margin-bottom:26px; padding:15px 18px; color:#F3C4A8; background:rgba(226,136,76,.13); border:1px solid rgba(226,136,76,.35); border-radius:8px; font-size:21px; font-weight:700; }
+.tmdb-settings-status.ready { color:#AEE9C8; background:rgba(87,192,138,.13); border-color:rgba(87,192,138,.35); }
+.tmdb-settings-form .field { margin-bottom:16px; }
+.tmdb-settings-form .field input { font-size:20px; }
+.tmdb-settings-actions { display:flex; flex-direction:column; align-items:flex-start; margin-top:16px; }
+.tmdb-settings-actions .btn { width:520px; }
+.tmdb-settings-help { flex:1; min-width:0; height:830px; padding:28px 34px; }
+.tmdb-settings-help h2 { margin-bottom:16px; font-size:28px; }
+.tmdb-settings-copy { color:#C3D0DA; font-size:18px; line-height:1.42; }
+.tmdb-settings-copy b { color:var(--text); }
+.tmdb-settings-url { display:inline-block; padding:12px 15px; color:var(--accent); background:var(--panel-2); border-radius:7px; font-size:19px; }
+.language-screen { display:flex; align-items:center; justify-content:center; }
+.language-card { width:980px; padding:54px 64px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
+.language-card .brand { margin-bottom:26px; }
+.language-list { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:28px 0 20px; }
+.language-choice { margin:0; text-align:left; }
+.language-hint { color:var(--muted); font-size:19px; }
+.login-title { margin:6px 0 16px; font-size:24px; color:var(--text); }
+.region-layout { display:grid; grid-template-columns:650px 1fr; gap:28px; min-height:760px; margin-top:24px; }
+.region-list { display:grid; grid-template-columns:1fr 1fr; gap:12px; align-content:start; }
+.region-list .btn { margin:0; }
+.region-help { padding:34px; }
+.tmdb-region-button { text-align:left; }
+.tmdb-how-title { margin-top:18px; }
+.tmdb-benefits { line-height:1.55; }
+.tmdb-settings-help .settings-recommended { margin-top:18px; padding:16px; font-size:18px; }
+
 .category-settings-top { display:flex; align-items:center; margin-bottom:18px; }
 .category-settings-top .btn { margin-bottom:0; }
 .category-settings-list, .favorite-order-list { width:1260px; height:820px; }
@@ -418,6 +468,77 @@ body.live-preview #html5player.on { z-index:11; box-shadow:none; }
 #overlay { position:fixed; left:0; top:0; right:0; bottom:0; z-index:60; display:none; }
 #overlay.on { display:block; }
 
+/* TMDb bilgisi detay sayfasini sikistirmayan, kumandayla yonetilen modal. */
+.tmdb-modal {
+  position:absolute; left:190px; top:70px; width:1540px; min-height:860px;
+  padding:42px 54px 32px; color:var(--text); background:rgba(13,22,32,.985);
+  border:2px solid rgba(119,151,180,.75); border-radius:22px;
+  box-shadow:0 32px 110px rgba(0,0,0,.75);
+}
+.tmdb-head { color:var(--accent); font-size:36px; line-height:1.1; font-weight:800; margin-bottom:28px; }
+.tmdb-content { height:710px; overflow:hidden; padding-right:20px; }
+.tmdb-layout { display:flex; align-items:flex-start; min-height:710px; padding-bottom:18px; }
+.tmdb-poster { width:330px; height:495px; flex:0 0 330px; object-fit:cover; border-radius:14px; margin-right:42px; }
+.tmdb-copy { flex:1; min-width:0; }
+.tmdb-title { font-size:42px; font-weight:800; line-height:1.15; }
+.tmdb-original { color:var(--muted); font-size:22px; margin-top:7px; }
+.tmdb-meta { color:#C3D0DA; font-size:21px; margin-top:18px; }
+.tmdb-ratings { display:flex; margin:20px 0 17px; }
+.tmdb-rating {
+  width:245px; height:90px; display:flex; flex-direction:column; justify-content:center;
+  padding:0 22px; margin-right:16px; border-radius:12px; background:rgba(1,180,228,.14);
+  border:1px solid rgba(1,180,228,.48);
+}
+.tmdb-rating.secondary { background:var(--panel-2); border-color:var(--line); }
+.tmdb-rating b { color:#8BD8A5; font-size:31px; line-height:1; }
+.tmdb-rating span { color:#C3D0DA; font-size:16px; margin-top:8px; }
+.tmdb-facts { display:grid; grid-template-columns:1fr 1fr; column-gap:30px; row-gap:5px; margin:0 0 9px; }
+.tmdb-fact { color:#C3D0DA; font-size:18px; line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tmdb-fact strong { color:var(--text); }
+.tmdb-section-title { color:var(--text); font-size:18px; font-weight:800; margin-bottom:6px; }
+.tmdb-cast-title { margin-top:13px; }
+.tmdb-cast-cards { display:flex; height:155px; margin-bottom:12px; overflow:hidden; }
+.tmdb-person { width:112px; flex:0 0 112px; margin-right:13px; }
+.tmdb-person-photo {
+  position:relative; width:94px; height:112px; margin:0 auto; display:flex; align-items:center; justify-content:center;
+  color:#718395; background:#1A2A38; border:1px solid var(--line); border-radius:9px; overflow:hidden;
+}
+.tmdb-person-photo .ui-icon { width:42px; height:42px; }
+.tmdb-person-photo img { position:absolute; left:0; top:0; right:0; bottom:0; width:100%; height:100%; object-fit:cover; background:#1A2A38; }
+.tmdb-person-name { height:38px; margin-top:5px; overflow:hidden; color:#DCE5EC; font-size:14px; line-height:1.25; text-align:center; }
+.tmdb-platforms { padding:10px 14px 8px; border:1px solid var(--line); border-radius:10px; background:rgba(28,43,57,.7); }
+.tmdb-platform-row { display:flex; align-items:center; min-height:31px; color:#C3D0DA; font-size:15px; overflow:hidden; }
+.tmdb-platform-row strong { width:95px; flex:0 0 95px; color:var(--text); }
+.tmdb-platform-row > span { display:flex; align-items:center; min-width:0; overflow:hidden; }
+.tmdb-provider { display:inline-flex; align-items:center; margin-right:13px; white-space:nowrap; }
+.tmdb-provider img { width:24px; height:24px; object-fit:cover; border-radius:5px; margin-right:5px; }
+.tmdb-platform-row em { color:var(--muted); font-style:normal; }
+.tmdb-platform-empty { color:var(--muted); font-size:16px; line-height:1.35; }
+.tmdb-justwatch { color:var(--muted); font-size:12px; margin-top:4px; }
+.tmdb-overview { color:#E0E7ED; font-size:19px; line-height:1.42; margin-top:15px; white-space:normal; }
+.tmdb-source { color:var(--muted); font-size:15px; margin-top:10px; }
+.tmdb-scrollbar { display:none; position:absolute; right:30px; top:115px; width:7px; height:700px; border-radius:4px; background:rgba(255,255,255,.1); }
+.tmdb-scrollbar.visible { display:block; }
+.tmdb-scrollbar i { position:absolute; left:0; top:0; width:7px; border-radius:4px; background:var(--accent); }
+.tmdb-footer { position:absolute; left:54px; right:54px; bottom:26px; color:var(--muted); font-size:17px; border-top:1px solid var(--line); padding-top:17px; }
+.tmdb-loading, .tmdb-empty { height:650px; display:flex; align-items:center; justify-content:center; color:#C3D0DA; font-size:25px; }
+.tmdb-loading i {
+  width:38px; height:38px; margin-right:20px; border:5px solid rgba(255,255,255,.18);
+  border-top-color:var(--accent); border-radius:50%; animation:tmdb-spin 1s linear infinite;
+}
+@keyframes tmdb-spin { to { transform:rotate(360deg); } }
+.tmdb-hint { color:var(--muted); font-size:20px; margin:-14px 0 20px; }
+.tmdb-candidate {
+  height:205px; display:flex; padding:13px 18px; margin-bottom:12px; overflow:hidden;
+  border:2px solid transparent; border-radius:12px; background:var(--panel-2);
+}
+.tmdb-candidate.focus { color:#10161C; background:var(--accent); border-color:#FFF1B5; }
+.tmdb-candidate img, .tmdb-poster-empty { width:120px; height:180px; flex:0 0 120px; object-fit:cover; border-radius:8px; margin-right:24px; background:#1A2A38; }
+.tmdb-candidate-title { font-size:27px; font-weight:800; margin-top:8px; }
+.tmdb-candidate-meta { color:var(--muted); font-size:18px; margin-top:5px; }
+.tmdb-candidate-overview { max-height:78px; overflow:hidden; color:#C3D0DA; font-size:18px; line-height:1.42; margin-top:13px; }
+.tmdb-candidate.focus .tmdb-candidate-meta, .tmdb-candidate.focus .tmdb-candidate-overview { color:#28343D; }
+
 /* AVPlay ve HTML5 icin ortak yazilim altyazi katmani. TV'nin global
    Caption ayarina bagli kalmadan secilen parcayi goruntuler. */
 #subtitle-layer {
@@ -445,6 +566,13 @@ body.live-preview #html5player.on { z-index:11; box-shadow:none; }
 .osd .seek { height:8px; background:rgba(255,255,255,.2); border-radius:4px; margin-top:18px; }
 .osd .seek i { display:block; height:100%; background:var(--accent); border-radius:4px; }
 .osd .times { display:flex; justify-content:space-between; font-size:19px; color:var(--muted); margin-top:8px; }
+.live-compact-stats {
+  display:flex; flex-wrap:wrap; gap:10px 26px; max-width:1320px; margin-top:18px;
+  padding:14px 18px; border:1px solid rgba(255,255,255,.18); border-radius:9px;
+  background:rgba(5,9,14,.76); color:#fff; font-size:18px;
+}
+.live-compact-stats span { white-space:nowrap; }
+.live-compact-stats b { color:var(--muted); font-weight:500; margin-right:7px; }
 
 /* Film/dizi kontrol cubugu: ince Samsung kumandasinda yalnizca yon + OK yeterli. */
 .vod-osd { padding-bottom:34px; }
@@ -469,6 +597,29 @@ body.live-preview #html5player.on { z-index:11; box-shadow:none; }
   background:rgba(31,44,56,.94); color:var(--text); font-size:20px; white-space:nowrap;
 }
 .vod-action.focus { background:var(--accent); color:#10161C; font-weight:700; }
+
+/* Goruntu bicimi secici: cok sayida modu kumandayla tek tek cevirmek yerine
+   okunabilir bir listeden dogrudan secmeye yarar. */
+.aspect-shade {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(4,7,10,.15),rgba(4,7,10,.82));
+}
+.aspect-panel {
+  position:absolute; right:70px; top:120px; width:620px; padding:38px 42px 32px;
+  border:1px solid var(--line); border-radius:14px; background:rgba(13,21,28,.98);
+  box-shadow:0 24px 90px rgba(0,0,0,.55);
+}
+.aspect-title { font-size:34px; font-weight:700; }
+.aspect-sub { color:var(--muted); font-size:18px; margin:5px 0 24px; }
+.aspect-row {
+  height:74px; display:flex; align-items:center; padding:0 18px; border-radius:8px;
+  color:#C3D0DA; font-size:22px;
+}
+.aspect-row.current { color:var(--accent); }
+.aspect-row.unsupported { color:var(--dim); }
+.aspect-row.focus { background:var(--accent); color:#10161C; font-weight:700; }
+.aspect-check { width:38px; flex:0 0 38px; font-size:24px; }
+.aspect-help { color:var(--muted); font-size:16px; margin-top:24px; }
 
 /* Ses ve altyazi secici. Video panelin arkasinda oynamaya devam eder. */
 .track-shade {
@@ -505,6 +656,8 @@ body.live-preview #html5player.on { z-index:11; box-shadow:none; }
 .track-row.compatibility { color:#F5C66A; font-size:20px; }
 .track-row.compatibility .track-check { color:#F5C66A; }
 .track-row.compatibility.focus { color:#10161C; }
+.track-row.disabled { color:var(--dim); }
+.track-row.disabled.focus { background:#66717A; color:#E1E6EA; }
 .track-row.focus { background:var(--accent); color:#10161C; font-weight:700; }
 .track-check { width:34px; flex:0 0 34px; font-size:24px; }
 .track-empty { color:var(--dim); font-size:19px; line-height:1.5; padding:18px 14px; }
@@ -566,30 +719,6 @@ body.live-preview #html5player.on { z-index:11; box-shadow:none; }
 .exit-title { font-size:34px; font-weight:700; margin-bottom:12px; }
 .exit-sub { color:var(--muted); font-size:20px; margin-bottom:30px; }
 .exit-actions { display:flex; }
-
-/* Canli yayin surerken acilan sanallastirilmis kanal secici */
-.channel-picker {
-  position:absolute; left:0; top:0; bottom:0; width:820px;
-  padding:42px 44px 40px;
-  background:linear-gradient(90deg,rgba(8,13,18,.99) 0%,rgba(13,21,28,.98) 82%,rgba(13,21,28,.82) 100%);
-  border-right:1px solid rgba(255,255,255,.10);
-}
-.channel-picker .picker-head { height:96px; }
-.channel-picker .picker-title { font-size:36px; font-weight:700; }
-.channel-picker .picker-sub { color:var(--muted); font-size:19px; margin-top:5px; }
-.channel-picker .picker-list { height:836px; overflow:hidden; }
-.picker-row {
-  height:76px; display:flex; align-items:center; padding:0 18px;
-  border-bottom:1px solid rgba(255,255,255,.07); border-radius:7px;
-}
-.picker-row .picker-num { width:76px; flex:0 0 76px; color:var(--dim); text-align:right; margin-right:20px; }
-.picker-row .picker-name { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:24px; }
-.picker-row .picker-star { width:32px; color:var(--accent); text-align:center; }
-.picker-row.selected { background:var(--accent); color:#10161C; font-weight:700; }
-.picker-row.selected .picker-num, .picker-row.selected .picker-star { color:#3A2E10; }
-.picker-row.playing .picker-name { color:var(--accent); }
-.picker-row.selected.playing .picker-name { color:#10161C; }
-.channel-picker .picker-help { color:var(--muted); font-size:18px; margin-top:9px; }
 
 /* ---------------- Ortak ---------------- */
 

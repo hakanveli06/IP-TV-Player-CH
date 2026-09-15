@@ -109,8 +109,7 @@ function registerRemoteKeys() {
       ChannelUp: 'CH_UP', ChannelDown: 'CH_DOWN', Info: 'INFO',
       MediaPlay: 'PLAY', MediaPause: 'PAUSE', MediaPlayPause: 'PLAYPAUSE',
       MediaStop: 'STOP', MediaFastForward: 'FF', MediaRewind: 'RW',
-      ColorF0Red: 'RED', ColorF1Green: 'GREEN',
-      ColorF2Yellow: 'YELLOW', ColorF3Blue: 'BLUE'
+      ColorF1Green: 'GREEN', ColorF2Yellow: 'YELLOW'
     };
     var names = Object.keys(keyMap);
     for (var n = 0; n <= 9; n++) names.push(String(n));
@@ -420,8 +419,10 @@ var Settings = {
   accountKeys: { liveEngine: true, vodEngine: true, liveFormat: true, liveBufferMode: true },
   defaults: {
     engine: 'auto', liveEngine: 'auto', vodEngine: 'auto', liveFormat: 'ts', liveBufferMode: 'auto',
-    railLabels: true, epg: true, aspect: 'auto', subtitleSize: 'normal',
-    preferredAudio: 'auto', preferredSubtitle: 'off', settingsVersion: 4
+    railLabels: true, epg: true, liveAspect: 'auto', aspect: 'auto', subtitleSize: 'normal',
+    preferredAudio: 'auto', preferredSubtitle: 'off', avplayCompatibility: 'auto',
+    tmdbCredential: '', uiLanguage: 'auto', languageChosen: false,
+    contentRegion: 'auto', settingsVersion: 9
   },
   load: function () {
     this.data = Store.get('settings', null) || {};
@@ -442,6 +443,41 @@ var Settings = {
       if (!this.data.preferredAudio) this.data.preferredAudio = 'auto';
       if (!this.data.preferredSubtitle) this.data.preferredSubtitle = 'off';
       this.data.settingsVersion = 4;
+    }
+    if (this.data.settingsVersion < 5) {
+      if (this.data.aspect === 'fullscreen') this.data.aspect = 'ratio16x9';
+      else if (this.data.aspect === 'letterbox') this.data.aspect = 'auto';
+      if (!this.data.liveAspect) this.data.liveAspect = 'auto';
+      this.data.settingsVersion = 5;
+    }
+    if (this.data.settingsVersion < 6) {
+      if (!this.data.avplayCompatibility) this.data.avplayCompatibility = 'auto';
+      this.data.settingsVersion = 6;
+    }
+    /* v1.17.1 ara surumundeki deneysel duraklat/yeniden-ac seceneklerini
+       dogrulanan kesintisiz eski-TV yontemine tasi. */
+    if (this.data.settingsVersion < 7) {
+      if (this.data.avplayCompatibility === 'legacyPause' || this.data.avplayCompatibility === 'legacyReload') {
+        this.data.avplayCompatibility = 'legacySync';
+      }
+      this.data.settingsVersion = 7;
+    }
+    /* Public pakette kullanici kendi TMDb API anahtarini veya okuma jetonunu
+       girebilir. Bu tercih IPTV hesabindan bagimsiz, televizyon geneline aittir. */
+    if (this.data.settingsVersion < 8) {
+      if (!this.data.tmdbCredential) this.data.tmdbCredential = '';
+      this.data.settingsVersion = 8;
+    }
+    /* Arayuz dili ile TMDb platform bolgesi birbirinden bagimsizdir. Mevcut
+       kurulumlar guncelleme sonrasinda ilk-kurulum ekranina zorlanmaz. */
+    if (this.data.settingsVersion < 9) {
+      if (!this.data.uiLanguage) this.data.uiLanguage = 'auto';
+      if (!this.data.contentRegion) this.data.contentRegion = 'auto';
+      var existing = Store.get('accounts', null), legacyCreds = Store.get('creds', null);
+      if (this.data.languageChosen == null) {
+        this.data.languageChosen = !!((existing && existing.items && existing.items.length) || legacyCreds);
+      }
+      this.data.settingsVersion = 9;
     }
     for (var k in this.defaults) {
       if (!Object.prototype.hasOwnProperty.call(this.data, k)) this.data[k] = this.defaults[k];
@@ -710,6 +746,49 @@ var TrackPrefs = {
     }
     AccountData.set('trackPrefs', this.data);
   }
+};
+
+/* Oynaticilarin bildirdigi parca dillerini icerik bazinda birlestirir. HTML5
+   veya TX3G incelemesinde ogrenilen adlar daha sonra AVPlay'in eksik
+   metadata'sini tamamlar; medya baglantisi acmaz ve sifre/URL saklamaz. */
+var TrackLabels = {
+  data: null,
+  max: 160,
+  load: function () {
+    this.data = AccountData.get('trackLabels', null) || {};
+    if (!this.data || typeof this.data !== 'object') this.data = {};
+    return this.data;
+  },
+  get: function (contentKey) {
+    if (!contentKey) return null;
+    if (!this.data) this.load();
+    var item = this.data[String(contentKey)];
+    if (item) item.used = Date.now();
+    return item || null;
+  },
+  set: function (contentKey, audio, text) {
+    if (!contentKey) return;
+    if (!this.data) this.load();
+    var key = String(contentKey), old = this.data[key] || { audio: [], text: [] };
+    function merge(previous, incoming) {
+      var out = (previous || []).slice(0), changed = false;
+      for (var i = 0; i < (incoming || []).length; i++) {
+        var lang = String(incoming[i] || 'und');
+        if (lang !== 'und' && out[i] !== lang) { out[i] = lang; changed = true; }
+      }
+      return { values: out, changed: changed };
+    }
+    var a = merge(old.audio, audio), t = merge(old.text, text);
+    if (!a.changed && !t.changed && this.data[key]) { this.data[key].used = Date.now(); return; }
+    this.data[key] = { audio: a.values, text: t.values, used: Date.now() };
+    var keys = Object.keys(this.data), self = this;
+    if (keys.length > this.max) {
+      keys.sort(function (x, y) { return (self.data[x].used || 0) - (self.data[y].used || 0); });
+      for (var n = 0; n < keys.length - this.max; n++) delete this.data[keys[n]];
+    }
+    AccountData.set('trackLabels', this.data);
+  },
+  clear: function () { this.data = {}; AccountData.set('trackLabels', {}); }
 };
 
 /* Yazilimsal TX3G altyazilarini hesap ve icerik kimligine gore saklar.
@@ -1262,7 +1341,7 @@ var UI = {
 var Diag = {
   page: 0,
   begin: function (kind) {
-    this.status = { Surum: 'H&M.v1.15.0', Oturum: kind + ' · ' + new Date().toISOString() };
+    this.status = { Surum: 'H&M.v1.19.1', Oturum: kind + ' · ' + new Date().toISOString() };
     this.page = 0;
   },
   move: function (delta) { this.page = Math.max(0, this.page + delta); this.render(); },

@@ -2,7 +2,7 @@
 const fs=require('fs'),vm=require('vm'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..');
 const elements={};
-function node(id){return elements[id]||(elements[id]={style:{},className:'',innerHTML:'',textContent:'',getBoundingClientRect:()=>({left:1347,top:189,width:506,height:180})});}
+function node(id){return elements[id]||(elements[id]={style:{},className:'',innerHTML:'',textContent:'',getBoundingClientRect:()=>({left:1347,top:189,width:506,height:285})});}
 const timers=new Map();let timerId=0,opens=0,stops=0,engine='html5';
 const sandbox={Api:{liveCandidates(){return [];},shortEpg(){return Promise.resolve([]);}},window:{addEventListener(){}},document:{body:{className:''},readyState:'loading',addEventListener(){},getElementById:node},
 setTimeout(fn){timers.set(++timerId,fn);return timerId;},clearTimeout(id){timers.delete(id);},setInterval(){},clearInterval(){},
@@ -14,7 +14,8 @@ UI:{toast(){},spin(){}},localStorage:{getItem(){return null;},setItem(){}}};
 vm.createContext(sandbox);
 for(const f of ['util.js','app.js'])vm.runInContext(fs.readFileSync(path.join(root,'js',f),'utf8'),sandbox);
 const p=sandbox.Playback,a=sandbox.App;
-a.live.chans={items:[{stream_id:1,name:'One'},{stream_id:2,name:'Two'}],setCurrent(id){this.current=id;}};
+a.live.chans={items:[{stream_id:1,name:'One'},{stream_id:2,name:'Two'}],index:0,
+  setItems(items){this.items=items;this.index=0;},jumpTo(i){this.index=i;},setCurrent(id){this.current=id;}};
 p.startLiveCandidate=()=>{opens++;sandbox.Player.playing=true;};
 p.renderLiveOsd=()=>{};
 
@@ -31,8 +32,13 @@ p.returnToPreview();assert.equal(p.previewOn,true);assert.equal(opens,1);
 engine='avplay';
 a.live.open(1);
 pending=p.channelOpenTimer;timers.get(pending)();timers.delete(pending);
-assert.equal(opens,2);assert.equal(p.previewOn,false,'AVPlay opens directly fullscreen');
-assert.equal(p.previewAvailable,false,'AVPlay does not offer a fake cropped preview');
+assert.equal(opens,2);assert.equal(p.previewOn,true,'AVPlay first OK starts preview');
+assert.equal(p.previewAvailable,true,'AVPlay preview remains available from fullscreen');
+assert.equal(sandbox.Player.rect.width,506);assert.equal(sandbox.Player.rect.height,285);
+a.live.open(1);
+assert.equal(opens,2,'Same AVPlay preview goes fullscreen without opening a second stream');
+assert.equal(p.previewOn,false);assert.equal(sandbox.Player.rect,null);
+p.returnToPreview();assert.equal(p.previewOn,true);assert.equal(opens,2,'Returning to AVPlay preview reuses the same stream');
 
 const schedule=a.live.epgHtml([
   {title:'<One>',description:'SUMMARY_MUST_NOT_RENDER',start:'2026-09-05 12:00:00',end:'2026-09-05 13:00:00'},
@@ -47,4 +53,6 @@ const css=fs.readFileSync(path.join(root,'css/app.css'),'utf8');
 assert(!html.includes('av-preview-masks'),'Obsolete native preview masks must not ship');
 assert(!html.includes('mp4box.all.min.js'));assert(!html.includes('compat.js'));
 assert(!css.includes('av-preview-masked'));
-console.log('Preview: HTML5 two-stage, AVPlay direct fullscreen, compact EPG and cleanup PASS');
+assert(css.includes('body.av-preview .live-preview-slot'));
+assert(css.includes('body.av-preview .live-info-panel #lv-info'));
+console.log('Preview: HTML5 and AVPlay two-stage, single-session fullscreen, compact EPG PASS');

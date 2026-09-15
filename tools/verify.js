@@ -6,8 +6,8 @@ const path = require('path');
 const child = require('child_process');
 
 const root = path.join(__dirname, '..');
-const sources = ['util.js', 'nav.js', 'api.js', 'tx3g.js', 'player.js', 'views.js', 'app.js'];
-const tests = ['test.js', 'test-strategy.js', 'test-preflight.js', 'test-accounts.js', 'test-range-discipline.js', 'test-subtitle-recovery.js', 'test-subtitle-ui.js', 'test-preview.js', 'test-final-features.js'];
+const sources = ['private-config.js', 'i18n.js', 'util.js', 'nav.js', 'api.js', 'tmdb.js', 'tx3g.js', 'player.js', 'views.js', 'app.js'];
+const tests = ['test.js', 'test-strategy.js', 'test-preflight.js', 'test-accounts.js', 'test-range-discipline.js', 'test-subtitle-recovery.js', 'test-subtitle-ui.js', 'test-preview.js', 'test-final-features.js', 'test-aspect.js', 'test-v116.js', 'test-v117.js', 'test-v1171.js', 'test-tmdb.js', 'test-v118.js', 'test-v119.js', 'test-v1191.js', 'test-v120.js', 'test-v121.js'];
 
 function run(args) {
   const result = child.spawnSync(process.execPath, args, { cwd: root, stdio: 'inherit' });

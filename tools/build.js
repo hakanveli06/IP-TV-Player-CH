@@ -10,8 +10,8 @@ const root = path.join(__dirname, '..');
 /* Uretim paketi icin acik izin listesi. Gelistirme/teshis dosyalari veya ileride
    klasore birakilan gecici kutuphaneler yanlislikla TV'ye tasinmaz. */
 const files = [
-  'config.xml', 'index.html', 'icon.png', 'css/app.css',
-  'js/util.js', 'js/nav.js', 'js/api.js', 'js/tx3g.js',
+  'config.xml', 'index.html', 'icon.png', 'assets/tmdb-logo.svg', 'css/app.css',
+  'js/private-config.js', 'js/i18n.js', 'js/util.js', 'js/nav.js', 'js/api.js', 'js/tmdb.js', 'js/tx3g.js',
   'js/player.js', 'js/views.js', 'js/app.js'
 ];
 const dirs = [];
@@ -37,12 +37,24 @@ function dosDate(date) {
   return (((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()) & 0xFFFF;
 }
 
-function collect() {
+function privateToken() {
+  const privateFile = path.join(root, '.private', 'tmdb-token.txt');
+  return String(process.env.HM_TMDB_TOKEN ||
+    (fs.existsSync(privateFile) ? fs.readFileSync(privateFile, 'utf8') : '')).trim();
+}
+
+function collect(includePrivate) {
   const entries = [];
   for (const name of files) {
     const full = path.join(root, name);
     if (!fs.existsSync(full)) throw new Error('Eksik paket dosyasi: ' + name);
-    entries.push({ name, data: fs.readFileSync(full) });
+    let data = fs.readFileSync(full);
+    if (name === 'js/private-config.js') {
+      const token = includePrivate ? privateToken() : '';
+      data = Buffer.from('window.HM_PRIVATE={tmdbToken:' + JSON.stringify(token) +
+        ',buildChannel:' + JSON.stringify(includePrivate ? 'family' : 'public') + '};\n', 'utf8');
+    }
+    entries.push({ name, data });
   }
   for (const dir of dirs) {
     const fullDir = path.join(root, dir);
@@ -116,15 +128,28 @@ if (!match) throw new Error('config.xml icinde surum bulunamadi.');
 
 const outDir = path.join(root, 'dist');
 fs.mkdirSync(outDir, { recursive: true });
-const output = path.join(outDir, 'HM_Player_v' + match[1] + '.wgt');
-const entries = collect();
-fs.writeFileSync(output, zip(entries));
+const output = path.join(outDir, 'HM_Player_v' + match[1] + '_Public.wgt');
+/* Public paket daima sir icermeyen, kullanicinin kendi TMDb anahtarini
+   uygulama icinden girebildigi dagitimdir. */
+const entries = collect(false);
+const publicData = zip(entries);
+const localToken = privateToken();
+if (localToken && entries.some(function (entry) { return entry.data.includes(Buffer.from(localToken, 'utf8')); })) {
+  throw new Error('GUVENLIK: Yerel TMDb jetonu Public pakete sizdi. Paket yazilmadi.');
+}
+fs.writeFileSync(output, publicData);
 console.log(output);
 console.log(entries.map(function (entry) { return entry.name; }).join('\n'));
-if (process.argv.indexOf('--share') !== -1) {
-  const name = 'HM_Player_v' + match[1] + '_Temel.wgt';
-  const data = fs.readFileSync(output);
+if (process.argv.indexOf('--family') !== -1 || process.argv.indexOf('--share') !== -1) {
+  const name = 'HM_Player_v' + match[1] + '_Family.wgt';
+  const token = privateToken();
+  if (!token) throw new Error('Family paketi icin HM_TMDB_TOKEN veya .private/tmdb-token.txt gerekli.');
+  const familyEntries = collect(true);
+  if (!familyEntries.some(function (entry) { return entry.data.includes(Buffer.from(token, 'utf8')); })) {
+    throw new Error('Family paketine TMDb jetonu eklenemedi.');
+  }
+  const data = zip(familyEntries);
   fs.writeFileSync(path.join(root, name), data);
-  fs.writeFileSync(path.join(root, 'HM_Player_v' + match[1] + '_Paylasim.zip'), zip([{ name, data }]));
-  console.log('Temel WGT ve paylasim ZIP hazir: v' + match[1]);
+  fs.writeFileSync(path.join(root, 'HM_Player_v' + match[1] + '_Family.zip'), zip([{ name, data }]));
+  console.log('Public ve Family paketleri hazir: v' + match[1]);
 }

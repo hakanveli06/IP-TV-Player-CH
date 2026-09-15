@@ -2,7 +2,7 @@
 'use strict';
 
 var App = {
-  versionLabel: 'H&M.v1.15.0',
+  versionLabel: 'H&M.v1.21.0',
   route: null,
   history: [],
   rail: null,
@@ -12,6 +12,7 @@ var App = {
 
   boot: function () {
     Settings.load();
+    I18n.apply();
     Accounts.load();
     registerRemoteKeys();
     this.buildRail();
@@ -32,6 +33,7 @@ var App = {
       AccountData.clear();
       Settings.accountData = null;
       if (Accounts.list().length) Views.accounts({ standalone: true });
+      else if (!Settings.get('languageChosen')) Views.languageSetup({ initial: true });
       else Views.login({ add: true, initial: true });
     }
   },
@@ -49,7 +51,7 @@ var App = {
   refreshRailAccount: function () {
     var profile = Accounts.active();
     var name = document.getElementById('rail-account-name');
-    if (name) name.textContent = profile ? (profile.name || profile.username) : 'Hesap secin';
+    if (name) name.textContent = profile ? (profile.name || profile.username) : t('rail.account');
   },
 
   saveAccountForm: function (values, info, opts) {
@@ -143,13 +145,13 @@ var App = {
   /* ---------------- sol serit ---------------- */
 
   railDefs: [
-    { id: 'live', ic: 'live', tx: 'Canli TV' },
-    { id: 'movies', ic: 'movies', tx: 'Filmler' },
-    { id: 'series', ic: 'series', tx: 'Diziler' },
-    { id: 'favs', ic: 'favs', tx: 'Favoriler' },
-    { id: 'recent', ic: 'recent', tx: 'Son İzlediklerim' },
-    { id: 'settings', ic: 'settings', tx: 'Ayarlar' },
-    { id: 'about', ic: 'about', tx: 'Hakkında' }
+    { id: 'live', ic: 'live', txKey: 'rail.live' },
+    { id: 'movies', ic: 'movies', txKey: 'rail.movies' },
+    { id: 'series', ic: 'series', txKey: 'rail.series' },
+    { id: 'favs', ic: 'favs', txKey: 'rail.favs' },
+    { id: 'recent', ic: 'recent', txKey: 'rail.recent' },
+    { id: 'settings', ic: 'settings', txKey: 'rail.settings' },
+    { id: 'about', ic: 'about', txKey: 'rail.about' }
   ],
 
   buildRail: function () {
@@ -159,7 +161,7 @@ var App = {
     for (var i = 0; i < this.railDefs.length; i++) {
       var d = this.railDefs[i];
       var n = el('div', 'rail-item',
-        '<span class="ic">' + uiIcon(d.ic) + '</span><span class="tx">' + d.tx + '</span>');
+        '<span class="ic">' + uiIcon(d.ic) + '</span><span class="tx">' + t(d.txKey) + '</span>');
       wrap.appendChild(n);
       nodes.push(n);
     }
@@ -167,7 +169,7 @@ var App = {
     wrap.appendChild(spacer);
     var active = Accounts.active();
     var account = el('div', 'rail-account', uiIcon('account') +
-      '<span id="rail-account-name">' + esc(active ? (active.name || active.username) : 'Hesap secin') + '</span>');
+      '<span id="rail-account-name">' + esc(active ? (active.name || active.username) : t('rail.account')) + '</span>');
     wrap.appendChild(account);
     var version = el('div', 'rail-version', esc(this.versionLabel));
     wrap.appendChild(version);
@@ -242,21 +244,16 @@ var App = {
     ov.className = 'on';
     ov.innerHTML = '<div class="exit-confirm"><div class="exit-box">' +
       '<div class="exit-title">H&amp;M Player kapatilsin mi?</div>' +
-      '<div class="exit-sub">OK: Cikis yap&nbsp;&nbsp;&nbsp; Geri: Iptal</div>' +
-      '<div class="exit-actions"><div class="btn primary focus">Cikis yap</div>' +
-      '<div class="btn">Iptal</div></div></div></div>';
+      '<div class="exit-sub">Yon tuslari: Secim&nbsp;&nbsp;&nbsp; OK: Uygula&nbsp;&nbsp;&nbsp; Geri: Iptal</div>' +
+      '<div class="exit-actions"><div class="btn primary">Cikis yap</div>' +
+      '<div class="btn focus">Iptal</div></div></div></div>';
     var self = this;
-    Nav.setOverlay(function (e) {
-      var c = e.keyCode;
-      e.preventDefault();
-      if (c === KEY.ENTER) {
-        self.closeExitPrompt();
+    this._confirmIndex = 1;
+    this._confirmAction = function () {
         try { tizen.application.getCurrentApplication().exit(); }
         catch (err) { try { window.close(); } catch (err2) { } }
-      } else if (c === KEY.BACK || c === KEY.ESC) {
-        self.closeExitPrompt();
-      }
-    });
+    };
+    Nav.setOverlay(function (e) { self.handleConfirmKey(e); });
   },
 
   confirmDialog: function (title, message, okLabel, onConfirm) {
@@ -266,22 +263,43 @@ var App = {
     ov.className = 'on';
     ov.innerHTML = '<div class="exit-confirm"><div class="exit-box">' +
       '<div class="exit-title">' + esc(title) + '</div>' +
-      '<div class="exit-sub">' + esc(message) + '<br><br>OK: ' + esc(okLabel) + '&nbsp;&nbsp;&nbsp; Geri: Iptal</div>' +
-      '<div class="exit-actions"><div class="btn primary focus">' + esc(okLabel) + '</div>' +
-      '<div class="btn">Iptal</div></div></div></div>';
+      '<div class="exit-sub">' + esc(message) + '<br><br>Yon tuslari: Secim&nbsp;&nbsp;&nbsp; OK: Uygula&nbsp;&nbsp;&nbsp; Geri: Iptal</div>' +
+      '<div class="exit-actions"><div class="btn primary">' + esc(okLabel) + '</div>' +
+      '<div class="btn focus">Iptal</div></div></div></div>';
     var self = this;
-    Nav.setOverlay(function (e) {
-      var c = e.keyCode; e.preventDefault();
-      if (c === KEY.ENTER) {
-        self.closeExitPrompt();
-        if (onConfirm) onConfirm();
-      } else if (c === KEY.BACK || c === KEY.ESC) self.closeExitPrompt();
-    });
+    this._confirmIndex = 1;
+    this._confirmAction = onConfirm || null;
+    Nav.setOverlay(function (e) { self.handleConfirmKey(e); });
+  },
+
+  updateConfirmFocus: function () {
+    var buttons = document.querySelectorAll('#overlay .exit-actions .btn');
+    for (var i = 0; i < buttons.length; i++) {
+      var base = 'btn' + (i === 0 ? ' primary' : '');
+      buttons[i].className = base + (i === this._confirmIndex ? ' focus' : '');
+    }
+  },
+
+  handleConfirmKey: function (e) {
+    var c = e.keyCode; e.preventDefault();
+    if (c === KEY.LEFT) this._confirmIndex = 0;
+    else if (c === KEY.RIGHT) this._confirmIndex = 1;
+    else if (c === KEY.UP || c === KEY.DOWN) this._confirmIndex = this._confirmIndex ? 0 : 1;
+    else if (c === KEY.BACK || c === KEY.ESC) { this.closeExitPrompt(); return; }
+    else if (c === KEY.ENTER) {
+      var confirm = this._confirmIndex === 0, action = this._confirmAction;
+      this.closeExitPrompt();
+      if (confirm && action) action();
+      return;
+    } else return;
+    this.updateConfirmFocus();
   },
 
   closeExitPrompt: function () {
     if (!this._exitPromptOn) return;
     this._exitPromptOn = false;
+    this._confirmIndex = 1;
+    this._confirmAction = null;
     var ov = document.getElementById('overlay');
     ov.className = '';
     ov.innerHTML = '';
@@ -294,12 +312,19 @@ var App = {
     cats: null, chans: null, currentCat: null,
     catTimer: null, epgTimer: null, numBuf: '', numTimer: null,
     searchInput: null, searchQuery: '', searchTimer: null, searchToken: 0,
-    dailyEpg: null, dailyIndex: 0, dailyChannel: null,
+    dailyEpg: null, dailyIndex: 0, dailyChannel: null, dailyClose: null,
 
     previewHelpHtml: function () {
       return Player.pick(true) === 'html5'
         ? 'OK: Kanalı burada ön izle'
-        : '<b>AVPlay küçük ön izlemeyi desteklemiyor.</b><br>Ön izleme için Ayarlar &gt; Canlı TV oynatıcısı &gt; HTML5 seçin.<br><em>OK: Tam ekran aç</em>';
+        : '<b>OK: Kanalı AVPlay ile burada ön izle</b><br><em>Aynı kanalda tekrar OK: Tam ekran</em>';
+    },
+
+    categoryName: function (categoryId, fallback) {
+      for (var i = 0; this.cats && i < this.cats.items.length; i++) {
+        if (String(this.cats.items[i].category_id) === String(categoryId)) return this.cats.items[i].category_name;
+      }
+      return fallback || 'Kanallar';
     },
 
     resetSearch: function () {
@@ -439,6 +464,36 @@ var App = {
       });
     },
 
+    adoptPlaybackCategory: function (items, index, categoryId, categoryName) {
+      if (!this.chans) return;
+      if (this.catTimer) { clearTimeout(this.catTimer); this.catTimer = null; }
+      if (this.searchTimer) { clearTimeout(this.searchTimer); this.searchTimer = null; }
+      this.searchQuery = '';
+      this.searchToken++;
+      if (this.searchInput) this.searchInput.value = '';
+      var searchState = document.getElementById('lv-search-state');
+      if (searchState) searchState.textContent = '';
+
+      var cat = null, catIndex = -1;
+      for (var i = 0; this.cats && i < this.cats.items.length; i++) {
+        if (String(this.cats.items[i].category_id) === String(categoryId)) {
+          cat = this.cats.items[i]; catIndex = i; break;
+        }
+      }
+      this.currentCat = cat || { category_id: categoryId, category_name: categoryName || 'Kanallar' };
+      if (this.cats && catIndex >= 0) {
+        this.cats.index = catIndex; this.cats.ensure(); this.cats.draw();
+      }
+      this.chans.emptyText = 'Bu kategoride kanal yok';
+      this.chans.setItems(items || []);
+      if (items && items.length) this.chans.jumpTo(Math.max(0, Math.min(items.length - 1, index || 0)));
+      var title = document.getElementById('lv-title');
+      var count = document.getElementById('lv-count');
+      if (title) title.textContent = this.currentCat.category_name || 'Kanallar';
+      if (count) count.textContent = (items ? items.length : 0) + ' kanal';
+      if (categoryId != null && String(categoryId).indexOf('__') !== 0) AccountData.set('lastLiveCat', categoryId);
+    },
+
     showEpg: function (ch) {
       var box = document.getElementById('lv-info');
       if (!box) return;
@@ -478,10 +533,11 @@ var App = {
       }).join('') + '</div>';
     },
 
-    openDailyEpg: function (ch) {
+    openDailyEpg: function (ch, onClose) {
       if (!ch) return;
       if (!Settings.get('epg')) { UI.toast('Yayin akisi ayarlardan kapali'); return; }
       this.dailyChannel = ch; this.dailyEpg = null; this.dailyIndex = 0;
+      this.dailyClose = typeof onClose === 'function' ? onClose : null;
       var overlay = document.getElementById('overlay');
       overlay.className = 'on';
       overlay.innerHTML = '<div class="daily-epg"><div class="daily-title">Bugünkü yayın akışı</div>' +
@@ -543,10 +599,13 @@ var App = {
     },
 
     closeDailyEpg: function () {
+      var onClose = this.dailyClose;
       this.dailyChannel = null; this.dailyEpg = null; this.dailyIndex = 0;
+      this.dailyClose = null;
       var overlay = document.getElementById('overlay');
       overlay.className = ''; overlay.innerHTML = '';
       Nav.clearOverlay();
+      if (onClose) onClose();
     },
 
     numberJump: function (digit) {
@@ -573,9 +632,8 @@ var App = {
         String(Playback.channels[Playback.index].stream_id) === String(ch.stream_id)) {
         Playback.fullscreenPreview(); return;
       }
-      var canPreview = Player.pick(true) === 'html5';
       Playback.startLive(this.chans.items, index, {
-        preview: canPreview,
+        preview: true,
         categoryId: this.currentCat ? this.currentCat.category_id : '__mixed',
         categoryName: this.currentCat ? this.currentCat.category_name : 'Kanallar'
       });
@@ -626,6 +684,7 @@ var App = {
         kind: 'movie',
         id: item.stream_id,
         extension: ext,
+        videoInfo: info && info.info && info.info.video ? info.info.video : null,
         startAt: startAt || 0
       });
     },
@@ -645,8 +704,238 @@ var App = {
         id: ep.id,
         seriesId: series.series_id,
         extension: ext,
+        videoInfo: ep && ep.info && ep.info.video ? ep.info.video : (ep.video || null),
         startAt: r ? r.pos : 0
       });
+    }
+  },
+
+  /* =============================== TMDB AYRINTILARI =============================== */
+
+  tmdb: {
+    active: false, requestId: 0, state: null, candidateIndex: 0,
+
+    show: function (kind, item, info) {
+      var self = this;
+      if (!Tmdb.configured()) {
+        App.confirmDialog(t('tmdb.why'), t('tmdb.benefits') + ' ' + t('tmdb.optional'), t('tmdb.enable'), function () {
+          Views.tmdbSettings();
+        });
+        return;
+      }
+      this.active = true;
+      this.candidateIndex = 0;
+      this.state = { state: 'loading', title: item.name || '' };
+      this.render();
+      Nav.setOverlay(function (e) { self.key(e); });
+      var requestId = ++this.requestId;
+      Tmdb.lookup(kind, item, info).then(function (result) {
+        if (!self.active || requestId !== self.requestId) return;
+        self.state = result;
+        self.candidateIndex = 0;
+        self.render();
+      })['catch'](function (error) {
+        if (!self.active || requestId !== self.requestId) return;
+        self.state = { state: 'error', message: error && error.message ? error.message : 'Bilgiler alinamadi.' };
+        self.render();
+      });
+    },
+
+    close: function () {
+      this.active = false;
+      this.requestId++;
+      this.state = null;
+      var overlay = document.getElementById('overlay');
+      overlay.className = ''; overlay.innerHTML = '';
+      Nav.clearOverlay();
+      Nav.focus('btns');
+    },
+
+    score: function (value) {
+      value = Number(value || 0);
+      return value ? value.toFixed(1).replace('.', ',') : '-';
+    },
+
+    money: function (value) {
+      value = Number(value || 0);
+      if (!value) return '';
+      function amount(number, suffix) {
+        var digits = number >= 100 ? 0 : (number >= 10 ? 1 : 2), shown = number.toFixed(digits);
+        if (digits) shown = shown.replace(/0+$/, '').replace(/\.$/, '');
+        return '$' + shown.replace('.', ',') + suffix;
+      }
+      if (value >= 1000000000) return amount(value / 1000000000, ' milyar');
+      if (value >= 1000000) return amount(value / 1000000, ' milyon');
+      if (value >= 1000) return amount(value / 1000, ' bin');
+      return '$' + String(Math.round(value));
+    },
+
+    platforms: function (availability) {
+      availability = availability || { status: 'error', groups: [] };
+      var region = availability.region || I18n.resolvedRegion();
+      var heading = t('tmdb.availableIn', { region: I18n.regionName(region) });
+      if (availability.status !== 'available') {
+        var text = availability.status === 'none' ? t('tmdb.none') : t('tmdb.unknown');
+        return '<div class="tmdb-platforms"><div class="tmdb-section-title">' + esc(heading) + '</div>' +
+          '<div class="tmdb-platform-empty">' + esc(text) + '</div>' +
+          '<div class="tmdb-justwatch">' + esc(t('tmdb.justwatch')) + '</div></div>';
+      }
+      var html = '<div class="tmdb-platforms"><div class="tmdb-section-title">' + esc(heading) + '</div>';
+      for (var i = 0; i < availability.groups.length; i++) {
+        var group = availability.groups[i], shown = Math.min(group.providers.length, 4);
+        html += '<div class="tmdb-platform-row"><strong>' + esc(group.label) + ':</strong><span>';
+        for (var j = 0; j < shown; j++) {
+          var provider = group.providers[j];
+          html += '<span class="tmdb-provider">' +
+            (provider.logo ? '<img src="' + esc(provider.logo) + '">' : '') + esc(provider.name) + '</span>';
+        }
+        if (group.providers.length > shown) html += '<em>+' + (group.providers.length - shown) + '</em>';
+        html += '</span></div>';
+      }
+      return html + '<div class="tmdb-justwatch">' + esc(t('tmdb.justwatch')) + '</div></div>';
+    },
+
+    castCards: function (cast) {
+      if (!cast || !cast.length) return '';
+      var html = '<div class="tmdb-section-title tmdb-cast-title">' + esc(t('tmdb.cast')) + '</div><div class="tmdb-cast-cards">';
+      for (var i = 0; i < cast.length; i++) {
+        var person = typeof cast[i] === 'string' ? { name: cast[i], photo: '' } : cast[i];
+        html += '<div class="tmdb-person"><div class="tmdb-person-photo">' + uiIcon('account') +
+          (person.photo ? '<img src="' + esc(person.photo) + '">' : '') + '</div>' +
+          '<div class="tmdb-person-name">' + esc(person.name) + '</div></div>';
+      }
+      return html + '</div>';
+    },
+
+    syncScroll: function () {
+      var box = document.getElementById('tmdb-scroll'), bar = document.getElementById('tmdb-scrollbar');
+      var thumb = document.getElementById('tmdb-scroll-thumb');
+      if (!box || !bar || !thumb) return;
+      var max = Math.max(0, box.scrollHeight - box.clientHeight);
+      if (max < 3) { bar.className = 'tmdb-scrollbar'; return; }
+      bar.className = 'tmdb-scrollbar visible';
+      var height = Math.max(64, Math.round(bar.clientHeight * box.clientHeight / box.scrollHeight));
+      var top = Math.round((bar.clientHeight - height) * box.scrollTop / max);
+      thumb.style.height = height + 'px';
+      thumb.style.top = top + 'px';
+    },
+
+    scroll: function (delta) {
+      var box = document.getElementById('tmdb-scroll');
+      if (!box) return;
+      var max = Math.max(0, box.scrollHeight - box.clientHeight);
+      box.scrollTop = Math.max(0, Math.min(max, box.scrollTop + delta));
+      this.syncScroll();
+    },
+
+    render: function () {
+      var overlay = document.getElementById('overlay'), state = this.state || { state: 'loading' };
+      overlay.className = 'on';
+      if (state.state === 'loading') {
+        overlay.innerHTML = '<div class="tmdb-modal"><div class="tmdb-head">' + esc(t('tmdb.details')) + '</div>' +
+          '<div class="tmdb-loading"><i></i><span>' + esc(t('tmdb.loading')) + '</span></div>' +
+          '<div class="tmdb-footer">' + esc(t('common.back')) + ': ' + esc(t('common.close')) + '</div></div>';
+        return;
+      }
+      if (state.state === 'error' || state.state === 'notfound') {
+        var message = state.state === 'notfound' ?
+          t('tmdb.noMatch') : state.message;
+        overlay.innerHTML = '<div class="tmdb-modal"><div class="tmdb-head">' + esc(t('tmdb.details')) + '</div>' +
+          '<div class="tmdb-empty">' + esc(message) + '</div>' +
+          '<div class="tmdb-footer">' + esc(t('tmdb.closeFooter')) + '</div></div>';
+        return;
+      }
+      if (state.state === 'candidates') {
+        var rows = '';
+        for (var i = 0; i < state.candidates.length; i++) {
+          var c = state.candidates[i];
+          rows += '<div class="tmdb-candidate' + (i === this.candidateIndex ? ' focus' : '') + '">' +
+            (c.poster ? '<img src="' + esc(c.poster) + '">' : '<div class="tmdb-poster-empty"></div>') +
+            '<div><div class="tmdb-candidate-title">' + esc(c.title) + '</div>' +
+            '<div class="tmdb-candidate-meta">' + esc(c.originalTitle && c.originalTitle !== c.title ? c.originalTitle + ' · ' : '') +
+            esc(c.year || t('tmdb.yearUnknown')) + '</div>' +
+            '<div class="tmdb-candidate-overview">' + esc(c.overview || t('tmdb.noSummary')) + '</div></div></div>';
+        }
+        overlay.innerHTML = '<div class="tmdb-modal"><div class="tmdb-head">' + esc(t('tmdb.choose')) + '</div>' +
+          '<div class="tmdb-hint">' + esc(t('tmdb.multiple')) + '</div>' + rows +
+          '<div class="tmdb-footer">' + esc(t('tmdb.candidateFooter')) + '</div></div>';
+        return;
+      }
+
+      var d = state.data, overview = '', overviewSource = '';
+      if (d.overviewLocalized || d.overviewTr) { overview = d.overviewLocalized || d.overviewTr; overviewSource = t('tmdb.summaryTmdb'); }
+      else if (d.overviewEn) { overview = d.overviewEn; overviewSource = t('tmdb.summaryEnglish'); }
+      else if (state.providerPlot) { overview = state.providerPlot; overviewSource = t('tmdb.summaryProvider'); }
+      var details = [];
+      if (d.year) details.push(String(d.year));
+      if (d.genres && d.genres.length) details.push(d.genres.join(', '));
+      if (d.type === 'movie' && d.runtime) details.push(d.runtime + ' ' + t('tmdb.minutes'));
+      if (d.type === 'tv' && d.seasons) details.push(d.seasons + ' ' + t('tmdb.seasons'));
+      if (d.ageRating) details.push(t('tmdb.age') + ': ' + d.ageRating);
+      var provider = state.providerScore !== '' && state.providerScore != null ?
+        '<div class="tmdb-rating secondary"><b>' + esc(state.providerScore) + '</b><span>' + esc(t('tmdb.providerScore')) + '</span></div>' : '';
+      var facts = '';
+      if (d.directors && d.directors.length) facts += '<div class="tmdb-fact"><strong>' +
+        (d.type === 'movie' ? t('tmdb.director').replace(':', '') : t('tmdb.creator')) + ':</strong> ' + esc(d.directors.join(', ')) + '</div>';
+      if (d.productionCompanies && d.productionCompanies.length) facts += '<div class="tmdb-fact"><strong>' + esc(t('tmdb.company')) + '</strong> ' +
+        esc(d.productionCompanies.join(', ')) + '</div>';
+      if (d.productionCountries && d.productionCountries.length) facts += '<div class="tmdb-fact"><strong>' + esc(t('tmdb.country')) + '</strong> ' +
+        esc(d.productionCountries.join(', ')) + '</div>';
+      if (d.type === 'movie' && d.budget) facts += '<div class="tmdb-fact"><strong>' + esc(t('tmdb.budget')) + '</strong> ' + esc(this.money(d.budget)) + '</div>';
+      if (d.type === 'movie' && d.revenue) facts += '<div class="tmdb-fact"><strong>' + esc(t('tmdb.revenue')) + '</strong> ' + esc(this.money(d.revenue)) + '</div>';
+      overlay.innerHTML = '<div class="tmdb-modal tmdb-result">' +
+        '<div class="tmdb-head">' + esc(t('tmdb.details')) + '</div><div class="tmdb-content" id="tmdb-scroll"><div class="tmdb-layout">' +
+        (d.poster ? '<img class="tmdb-poster" src="' + esc(d.poster) + '">' : '') +
+        '<div class="tmdb-copy"><div class="tmdb-title">' + esc(d.title) + '</div>' +
+        (d.originalTitle && d.originalTitle !== d.title ? '<div class="tmdb-original">' + esc(d.originalTitle) + '</div>' : '') +
+        '<div class="tmdb-meta">' + esc(details.join(' · ')) + '</div>' +
+        '<div class="tmdb-ratings"><div class="tmdb-rating"><b>' + this.score(d.voteAverage) + '</b>' +
+        '<span>TMDb · ' + esc(d.voteCount || 0) + ' ' + esc(t('tmdb.votes')) + '</span></div>' + provider + '</div>' +
+        (facts ? '<div class="tmdb-facts">' + facts + '</div>' : '') +
+        this.castCards(d.cast) +
+        this.platforms(d.availability) +
+        '<div class="tmdb-overview">' + esc(overview || t('tmdb.noSummary')) + '</div>' +
+        (overviewSource ? '<div class="tmdb-source">' + esc(overviewSource) + '</div>' : '') +
+        '</div></div></div><div class="tmdb-scrollbar" id="tmdb-scrollbar"><i id="tmdb-scroll-thumb"></i></div>' +
+        '<div class="tmdb-footer">' + esc(t('tmdb.footer')) + '</div></div>';
+      var actorImages = overlay.querySelectorAll('.tmdb-person-photo img');
+      for (var imageIndex = 0; imageIndex < actorImages.length; imageIndex++) {
+        actorImages[imageIndex].onerror = function () { this.style.display = 'none'; };
+      }
+      var self = this;
+      setTimeout(function () { if (self.active) self.syncScroll(); }, 0);
+    },
+
+    choose: function () {
+      var self = this, context = this.state, candidate = context.candidates[this.candidateIndex];
+      if (!candidate) return;
+      this.state = { state: 'loading' }; this.render();
+      var requestId = ++this.requestId;
+      Tmdb.choose(context, candidate).then(function (result) {
+        if (!self.active || requestId !== self.requestId) return;
+        self.state = result; self.render();
+      })['catch'](function (error) {
+        if (!self.active || requestId !== self.requestId) return;
+        self.state = { state: 'error', message: error.message || 'Bilgiler alinamadi.' }; self.render();
+      });
+    },
+
+    key: function (e) {
+      var c = e.keyCode;
+      e.preventDefault();
+      if (c === KEY.BACK || c === KEY.ESC) { this.close(); return; }
+      if (this.state && this.state.state === 'candidates') {
+        if (c === KEY.UP) this.candidateIndex = Math.max(0, this.candidateIndex - 1);
+        else if (c === KEY.DOWN) this.candidateIndex = Math.min(this.state.candidates.length - 1, this.candidateIndex + 1);
+        else if (c === KEY.ENTER) { this.choose(); return; }
+        else return;
+        this.render(); return;
+      }
+      if (this.state && this.state.state === 'found') {
+        if (c === KEY.UP) { this.scroll(-390); return; }
+        if (c === KEY.DOWN) { this.scroll(390); return; }
+      }
+      if (c === KEY.ENTER) this.close();
     }
   },
 
@@ -805,22 +1094,51 @@ var App = {
   settings: {
     defs: function () {
       return [
+        {
+          label: function () { return t('language.change') + ': ' + I18n.languageName(Settings.get('uiLanguage') || 'auto'); },
+          title: t('settings.languageTitle'),
+          help: t('settings.languageHelp'),
+          recommended: t('common.auto'),
+          run: function () { Views.languageSettings(); return false; }
+        },
         { label: function () { return 'Son teşhis raporunu göster'; },
           title: 'Yerleşik teşhis',
           help: 'Son oynatma oturumunun motor, çözünürlük, akış hızı, tampon ve hata bilgilerini gösterir. Hesap şifresi rapora eklenmez.',
           run: function () { Diag.loadLast(); return false; } },
+        {
+          label: function () { return 'TMDb: ' + Tmdb.sourceLabel(); },
+          title: t('settings.tmdbTitle'),
+          help: t('settings.tmdbHelp') + ' ' + t('tmdb.region') + ': ' + I18n.regionName(Settings.get('contentRegion') || 'auto') + '.',
+          recommended: Tmdb.embeddedToken() ? 'Family anahtarı hazır.' : 'Kendi TMDb API anahtarınızı girip bağlantıyı test edin.',
+          run: function () { Views.tmdbSettings(); return false; }
+        },
         {
           label: function () {
             var m = { auto: 'Otomatik', avplay: 'AVPlay (Tizen)', html5: 'HTML5 video' };
             return 'Canli TV oynaticisi: ' + m[Settings.get('liveEngine')];
           },
           title: 'Canlı TV oynatıcısı',
-          help: 'AVPlay canlı yayınlarda donanımsal oynatmayı kullanır. HTML5 küçük kanal ön izlemesini destekler. Otomatik seçenekte televizyonda AVPlay varsa öncelik ona verilir.',
-          recommended: 'Canlı yayın kararlılığı için AVPlay; küçük ön izleme için HTML5.',
+          help: 'AVPlay donanımsal oynatmayı, HTML5 tarayıcı video katmanını kullanır. Her iki motor da kanal listesinde küçük ön izleme sunar; kararsız bağlantılarda AVPlay daha iyi sonuç verebilir.',
+          recommended: 'Canlı yayın kararlılığı için AVPlay önerilir.',
           run: function () {
             var order = ['auto', 'avplay', 'html5'];
             var i = order.indexOf(Settings.get('liveEngine'));
             Settings.set('liveEngine', order[(i + 1) % order.length]);
+          }
+        },
+        {
+          label: function () {
+            return 'Samsung AVPlay uyumlulugu: ' + Player.avCompatibilityLabel(Settings.get('avplayCompatibility'));
+          },
+          title: 'Samsung AVPlay uyumluluğu',
+          help: 'AVPlay ön izlemesinden tam ekrana geçerken görüntü küçük kalıyorsa kullanılır. Otomatik mod Tizen 5.0 ve daha eski cihazlarda doğrulanan eski-TV yerleşimini, yeni veya sürümü algılanamayan cihazlarda standart yerleşimi seçer. Açık eski-TV yöntemini, Kapalı standart yöntemi zorlar.',
+          recommended: 'Otomatik',
+          run: function () {
+            var order = ['auto', 'legacySync', 'standard'];
+            var i = order.indexOf(Settings.get('avplayCompatibility'));
+            if (i < 0) i = 0;
+            Settings.set('avplayCompatibility', order[(i + 1) % order.length]);
+            UI.toast('Yeni yöntem bir sonraki ön izleme geçişinde uygulanır', 3000);
           }
         },
         {
@@ -865,15 +1183,25 @@ var App = {
         {
           label: function () { return 'Yayin akisi (EPG): ' + (Settings.get('epg') ? 'acik' : 'kapali'); },
           title: 'Yayın akışı',
-          help: 'Kanal listesindeki şimdi/sıradaki bilgisini ve Sağ tuşla açılan bugünkü program listesini etkinleştirir.',
+          help: 'Kanal listesindeki şimdi/sıradaki bilgisini ve tam ekranda Aşağı tuşla açılan bugünkü program listesini etkinleştirir.',
           recommended: 'Açık',
           run: function () { Settings.set('epg', !Settings.get('epg')); }
         },
         {
-          label: function () { return 'Film/dizi goruntu formati: ' + Player.aspectLabel(Settings.get('aspect')); },
-          title: 'Görüntü biçimi',
-          help: 'Film ve dizinin ekrana nasıl yerleşeceğini belirler. Oranı koru görüntüyü bozmaz; 16:9 doldur görüntüyü yatay veya dikey esnetebilir.',
-          recommended: 'Otomatik veya Oranı koru',
+          label: function () { return 'Canli TV goruntu bicimi: ' + Player.aspectLabel(Settings.get('liveAspect')); },
+          title: 'Canlı TV görüntü biçimi',
+          help: 'AVPlay ve HTML5 canlı görüntüsünün ekrana yerleşimini seçer. Zorunlu biçimler görüntüyü esnetebilir. İki kırpma modu AU8000 AVPlay katmanında uygulanamadığı için HTML5 gerektirir.',
+          recommended: 'Otomatik',
+          run: function () {
+            var next = Player.nextAspect(Settings.get('liveAspect'));
+            Settings.set('liveAspect', next);
+          }
+        },
+        {
+          label: function () { return 'Film/dizi goruntu bicimi: ' + Player.aspectLabel(Settings.get('aspect')); },
+          title: 'Film ve dizi görüntü biçimi',
+          help: 'Görüntünün ekrana yerleşimini belirler. Zorunlu 4:3/16:9/21:9 seçenekleri görüntüyü esnetebilir. Yakınlaştırma ve doldurma kırpma modları bu cihazda HTML5 ile kullanılmalıdır.',
+          recommended: 'Otomatik',
           run: function () {
             var next = Player.nextAspect(Settings.get('aspect'));
             Settings.set('aspect', next);
@@ -947,6 +1275,7 @@ var App = {
             Api.cache = {};
             SubtitleCache.clear();
             SubtitleStrategy.reset();
+            if (typeof TrackLabels !== 'undefined') TrackLabels.clear();
             UI.toast('Liste ve altyazi onbellegi temizlendi');
           }
         },
@@ -1017,8 +1346,20 @@ var Playback = {
   },
 
   returnToPreview: function () {
+    var current = this.channels && this.channels[this.index];
+    if (current && App.route === 'live' && App.live.chans) {
+      var context = this.liveContext || {};
+      var categoryId = current.category_id != null ? current.category_id : context.categoryId;
+      var categoryName = App.live.categoryName(categoryId,
+        current.category_name || context.categoryName || 'Kanallar');
+      App.live.adoptPlaybackCategory(this.channels, this.index, categoryId, categoryName);
+      this.channels = App.live.chans.items;
+      for (var i = 0; i < this.channels.length; i++) {
+        if (String(this.channels[i].stream_id) === String(current.stream_id)) { this.index = i; break; }
+      }
+    }
     this.previewOn = true;
-    this.channelListOn = false;
+    this.previewAvailable = true;
     this.osdOn = false;
     if (this.osdTimer) clearTimeout(this.osdTimer);
     this.overlay().className = ''; this.overlay().innerHTML = '';
@@ -1029,7 +1370,6 @@ var Playback = {
   },
   mode: null,            /* 'live' | 'vod' */
   channels: null, index: 0,
-  channelListOn: false, channelListIndex: 0, channelListSource: 'back',
   recentChannelsOn: false, recentChannelIndex: 0,
   lastEpg: null,
   vodMeta: null,
@@ -1041,10 +1381,11 @@ var Playback = {
   bufferProfile: null, bufferSession: null,
   reconnectTimer: null, channelOpenTimer: null, recoveryTimes: null,
   liveStableTimer: null, liveAutoRecoveryStopped: false,
-  vodPanel: 'hidden', vodControlIndex: 1, vodTrackColumn: 'audio',
+  vodPanel: 'hidden', vodControlIndex: 0, vodTrackColumn: 'audio',
+  vodAspectIndex: 0, vodEngineOverride: null, vodSwitchToken: 0,
   vodAudioIndex: 0, vodTextIndex: 0, vodTracks: null, vodReady: false,
   subtitleText: '', subtitlePreviewTimer: null,
-  liveTechnicalInfo: false, vodTechnicalInfo: false,
+  liveTechnicalInfo: false, liveInfoCard: false, vodTechnicalInfo: false,
 
   overlay: function () { return document.getElementById('overlay'); },
 
@@ -1057,14 +1398,13 @@ var Playback = {
     this.index = index;
     this.liveContext = context || {};
     this.previewOn = !!this.liveContext.preview;
-    this.previewAvailable = this.previewOn;
+    this.previewAvailable = this.previewOn || (this.liveContext.previewAvailable !== false && App.route === 'live');
     if (!this.previewOn) Player.setViewport(null);
     this.recoveryTimes = [];
     this.liveAutoRecoveryStopped = false;
     this.liveTechnicalInfo = false;
-    this.channelListOn = false;
+    this.liveInfoCard = false;
     this.recentChannelsOn = false;
-    this.channelListIndex = index;
     if (this.channelOpenTimer) clearTimeout(this.channelOpenTimer);
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     Player.stop(true);
@@ -1085,12 +1425,11 @@ var Playback = {
     if (this.liveStableTimer) { clearTimeout(this.liveStableTimer); this.liveStableTimer = null; }
     if (this.bufferSession) LiveBuffer.end(this.bufferSession);
     this.bufferSession = null;
-    this.channelListOn = false;
-    this.channelListIndex = this.index;
     this.lastEpg = null;
     if (this.numTimer) { clearTimeout(this.numTimer); this.numTimer = null; }
     this.numBuf = '';
     this.liveTechnicalInfo = false;
+    this.liveInfoCard = false;
     this.overlay().className = 'on';
     this.renderLiveOsd(ch, null);
     this.showOsd(5000);
@@ -1162,8 +1501,8 @@ var Playback = {
         if (!self.previewOn) self.rememberCurrentLive();
       },
       onTime: function () {
-        if (self.osdOn && self.liveTechnicalInfo && self.channels[self.index] === ch) {
-          self.renderLiveOsd(ch, self.lastEpg, true);
+        if (self.osdOn && (self.liveTechnicalInfo || self.liveInfoCard) && self.channels[self.index] === ch) {
+          self.renderLiveOsd(ch, self.lastEpg, self.liveTechnicalInfo ? 'technical' : 'compact');
         }
       },
       onBufferingStart: function (event) {
@@ -1248,8 +1587,6 @@ var Playback = {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.bufferSession) { LiveBuffer.end(this.bufferSession); this.bufferSession = null; }
     Player.stop(true);
-    this.channelListOn = false;
-    this.channelListIndex = this.index;
     var ch = this.channels[this.index];
     if (ch) {
       this.overlay().className = 'on';
@@ -1280,7 +1617,9 @@ var Playback = {
     var catName = base.categoryName || ch.category_name || '';
     if (catId != null && catId !== '__recent' && catId !== '__search') AccountData.set('lastLiveCat', catId);
     AccountData.set('lastLiveChannel', { streamId: ch.stream_id, categoryId: catId, updated: Date.now() });
-    LiveHistory.add(ch, { categoryId: ch.category_id != null ? ch.category_id : catId, categoryName: catName });
+    var historyCatId = ch.category_id != null ? ch.category_id : catId;
+    var historyCatName = App.live.categoryName(historyCatId, ch.category_name || catName);
+    LiveHistory.add(ch, { categoryId: historyCatId, categoryName: historyCatName });
   },
 
   switchStoredChannel: function (record) {
@@ -1307,10 +1646,17 @@ var Playback = {
         UI.toast('Kanal artık sağlayıcı listesinde bulunmuyor');
         return;
       }
+      var categoryName = record.category_name || 'Son kanallar';
+      if (App.route === 'live' && App.live.chans) {
+        App.live.adoptPlaybackCategory(items, found,
+          categoryId == null ? '__recent' : categoryId, categoryName);
+        items = App.live.chans.items;
+      }
       self.startLive(items, found, {
         preview: false,
+        previewAvailable: true,
         categoryId: categoryId == null ? '__recent' : categoryId,
-        categoryName: record.category_name || 'Son kanallar'
+        categoryName: categoryName
       });
     })['catch'](function (e) {
       UI.spin(false); UI.toast(e.message || 'Kanal listesi alınamadı', 3500);
@@ -1378,6 +1724,33 @@ var Playback = {
     if (c === KEY.BACK || c === KEY.ESC || c === KEY.LEFT || c === KEY.RIGHT) this.hideRecentChannels();
   },
 
+  hideLiveInfo: function () {
+    if (this.osdTimer) { clearTimeout(this.osdTimer); this.osdTimer = null; }
+    this.osdOn = false;
+    this.liveTechnicalInfo = false;
+    this.liveInfoCard = false;
+    this.overlay().className = '';
+    this.overlay().innerHTML = '';
+  },
+
+  toggleLiveInfoCard: function () {
+    if (this.osdOn && this.liveInfoCard) { this.hideLiveInfo(); return; }
+    this.liveTechnicalInfo = false;
+    this.liveInfoCard = true;
+    this.renderLiveOsd(this.channels[this.index], this.lastEpg, 'compact');
+    this.showOsd(7000);
+  },
+
+  openLiveDailyEpg: function () {
+    var ch = this.channels && this.channels[this.index];
+    if (!ch) return;
+    this.hideLiveInfo();
+    var self = this;
+    App.live.openDailyEpg(ch, function () {
+      if (self.mode === 'live' && !self.previewOn) Nav.setOverlay(function (e) { self.keyLive(e); });
+    });
+  },
+
   keyLive: function (e) {
     var c = e.keyCode;
     e.preventDefault();
@@ -1385,19 +1758,19 @@ var Playback = {
     if (Diag.visible) { if (c === KEY.BACK || c === KEY.ENTER) Diag.hide(); return; }
 
     if (this.recentChannelsOn) { this.keyRecentChannels(c); return; }
-    if (this.channelListOn) { this.keyChannelList(c); return; }
 
     if (c === KEY.LEFT) { this.togglePreviousChannel(); return; }
     if (c === KEY.RIGHT) { this.showRecentChannels(); return; }
-    if (c === KEY.UP) { this.step(-1); return; }
-    if (c === KEY.DOWN) { this.step(1); return; }
+    if (c === KEY.UP) { this.toggleLiveInfoCard(); return; }
+    if (c === KEY.DOWN) { this.openLiveDailyEpg(); return; }
     if (c === KEY.CH_UP) { this.step(1); return; }
     if (c === KEY.CH_DOWN) { this.step(-1); return; }
-    if (c === KEY.ENTER) { if (this.previewAvailable) this.returnToPreview(); else this.showChannelList('ok'); return; }
+    if (c === KEY.ENTER) { this.returnToPreview(); return; }
     if (c === KEY.INFO) {
       if (this.liveTechnicalInfo) { Diag.render(); return; }
       this.liveTechnicalInfo = true;
-      this.renderLiveOsd(this.channels[this.index], this.lastEpg, true);
+      this.liveInfoCard = false;
+      this.renderLiveOsd(this.channels[this.index], this.lastEpg, 'technical');
       this.showOsd(7000);
       return;
     }
@@ -1413,99 +1786,9 @@ var Playback = {
       this.recoverLive('kullanici yenilemesi', false);
       return;
     }
-    if (c === KEY.RED) { Diag.toggle(); return; }
     if (c >= KEY.N0 && c <= KEY.N9) { this.numberEntry(c - KEY.N0); return; }
-    if (c === KEY.BACK || c === KEY.ESC) { if (this.previewAvailable) this.returnToPreview(); else this.showChannelList('back'); return; }
+    if (c === KEY.BACK || c === KEY.ESC) { this.returnToPreview(); return; }
     if (c === KEY.STOP) { this.exit(); return; }
-  },
-
-  showChannelList: function (source) {
-    this.channelListOn = true;
-    this.channelListSource = source === 'ok' ? 'ok' : 'back';
-    this.channelListIndex = this.index;
-    this.osdOn = false;
-    if (this.osdTimer) { clearTimeout(this.osdTimer); this.osdTimer = null; }
-    this.overlay().className = 'on';
-    this.renderChannelList();
-  },
-
-  hideChannelList: function () {
-    this.channelListOn = false;
-    this.channelListIndex = this.index;
-    this.overlay().className = '';
-    this.overlay().innerHTML = '';
-  },
-
-  renderChannelList: function () {
-    var total = this.channels ? this.channels.length : 0;
-    if (!total) return;
-    var visible = 11;
-    var first = Math.max(0, this.channelListIndex - Math.floor(visible / 2));
-    first = Math.min(first, Math.max(0, total - visible));
-    var last = Math.min(total, first + visible);
-    var cat = App.route === 'live' && App.live.currentCat ? App.live.currentCat.category_name : 'Kanallar';
-    var h = '<div class="channel-picker"><div class="picker-head">' +
-      '<div class="picker-title">' + esc(cat || 'Kanallar') + '</div>' +
-      '<div class="picker-sub">' + total + ' kanal  \u00b7  Secili ' + (this.channelListIndex + 1) + '</div></div>' +
-      '<div class="picker-list">';
-    for (var i = first; i < last; i++) {
-      var ch = this.channels[i];
-      var cls = 'picker-row';
-      if (i === this.channelListIndex) cls += ' selected';
-      if (i === this.index) cls += ' playing';
-      h += '<div class="' + cls + '"><div class="picker-num">' + esc(ch.num || (i + 1)) + '</div>' +
-        '<div class="picker-name">' + esc(ch.name) + '</div>' +
-        '<div class="picker-star">' + (Favs.has('live', ch.stream_id) ? '\u2605' : '') + '</div></div>';
-    }
-    var backHelp = this.channelListSource === 'ok' ? 'Geri Yayina don' : 'Geri Kategorilere don';
-    h += '</div><div class="picker-help">\u2191\u2193 Kanal sec  \u00b7  OK Ac/Kapat  \u00b7  Sari Favori  \u00b7  ' + backHelp + '</div></div>';
-    this.overlay().innerHTML = h;
-  },
-
-  moveChannelList: function (delta) {
-    var total = this.channels.length;
-    if (!total) return;
-    var n = this.channelListIndex + delta;
-    if (n < 0) n = 0;
-    if (n >= total) n = total - 1;
-    if (n !== this.channelListIndex) {
-      this.channelListIndex = n;
-      this.renderChannelList();
-    }
-  },
-
-  keyChannelList: function (c) {
-    if (c === KEY.UP) { this.moveChannelList(-1); return; }
-    if (c === KEY.DOWN) { this.moveChannelList(1); return; }
-    if (c === KEY.CH_UP) { this.moveChannelList(1); return; }
-    if (c === KEY.CH_DOWN) { this.moveChannelList(-1); return; }
-    if (c === KEY.LEFT) { this.moveChannelList(-10); return; }
-    if (c === KEY.RIGHT) { this.moveChannelList(10); return; }
-    if (c === KEY.YELLOW) {
-      var fav = this.channels[this.channelListIndex];
-      var on = Favs.toggle('live', fav.stream_id);
-      UI.toast(on ? 'Favorilere eklendi' : 'Favorilerden cikarildi');
-      this.renderChannelList();
-      return;
-    }
-    if (c === KEY.ENTER) {
-      var selected = this.channels[this.channelListIndex];
-      var playing = this.channels[this.index];
-      if (selected && playing && String(selected.stream_id) === String(playing.stream_id)) {
-        this.hideChannelList();
-        return;
-      }
-      this.index = this.channelListIndex;
-      this.recoveryTimes = [];
-      this.scheduleChannelOpen(250);
-      return;
-    }
-    if (c === KEY.BACK || c === KEY.ESC) {
-      if (this.channelListSource === 'ok') this.hideChannelList();
-      else this.exit(true);
-      return;
-    }
-    if (c === KEY.STOP) { this.exit(); }
   },
 
   numberEntry: function (d) {
@@ -1565,7 +1848,23 @@ var Playback = {
       '</div>';
   },
 
-  renderLiveOsd: function (ch, epg, technical) {
+  compactLiveStatsHtml: function () {
+    var s = Player.playbackStats();
+    var resolution = s.width && s.height ? s.width + '×' + s.height : 'Sunulmuyor';
+    var bitrate = s.bitrate ? this.formatRate(s.bitrate)
+      : (s.decodedRate ? this.formatRate(s.decodedRate) + ' (cozulen)' : 'Sunulmuyor');
+    var flow = s.bandwidth ? this.formatRate(s.bandwidth)
+      : (s.networkDownlink ? this.formatRate(s.networkDownlink) + ' (ag tahmini)' : 'Sunulmuyor');
+    return '<div class="live-compact-stats">' +
+      '<span><b>Cozunurluk</b> ' + esc(resolution) + '</span>' +
+      '<span><b>Motor</b> ' + esc(String(s.engine || '-').toUpperCase()) + '</span>' +
+      '<span><b>Kaynak</b> ' + esc(String(s.format || '-').toUpperCase()) + '</span>' +
+      '<span><b>Bitrate</b> ' + esc(bitrate) + '</span>' +
+      '<span><b>Akis</b> ' + esc(flow) + '</span>' +
+      '</div>';
+  },
+
+  renderLiveOsd: function (ch, epg, detail) {
     var body = '<div class="osd"><div class="ch">' +
       '<div class="chno">' + esc(ch.num || '') + '</div>' +
       '<div class="chname">' + esc(ch.name) + '</div></div>';
@@ -1581,9 +1880,10 @@ var Playback = {
         '<div class="seek"><i style="width:' + pct.toFixed(0) + '%"></i></div>';
       if (epg[1]) body += '<div class="sub" style="margin-top:10px">Sirada: ' + esc(b64(epg[1].title)) + '</div>';
     } else {
-      body += '<div class="sub">Kanal degistirmek icin yukari / asagi</div>';
+      body += '<div class="sub">Yayin akisi bilgisi bekleniyor</div>';
     }
-    if (technical) body += this.technicalStatsHtml();
+    if (detail === 'compact') body += this.compactLiveStatsHtml();
+    else if (detail === 'technical' || detail === true) body += this.technicalStatsHtml();
     body += '</div>';
     this.overlay().innerHTML = body;
   },
@@ -1594,7 +1894,8 @@ var Playback = {
     Api.shortEpg(ch.stream_id, 2).then(function (list) {
       if (self.mode !== 'live') return;
       if (self.channels[self.index] !== ch) return;
-      if (self.osdOn) self.renderLiveOsd(ch, list, self.liveTechnicalInfo);
+      if (self.osdOn) self.renderLiveOsd(ch, list,
+        self.liveTechnicalInfo ? 'technical' : (self.liveInfoCard ? 'compact' : null));
       self.lastEpg = list;
       self.updatePreview();
     })['catch'](function () {
@@ -1624,13 +1925,14 @@ var Playback = {
     return null;
   },
 
-  startVod: function (meta) {
+  startVod: function (meta, engineOverride) {
     Player.setViewport(null);
     var self = this;
     this.mode = 'vod';
     this.vodMeta = meta;
+    this.vodEngineOverride = engineOverride === 'avplay' || engineOverride === 'html5' ? engineOverride : null;
     this.vodPanel = 'hidden';
-    this.vodControlIndex = 1;
+    this.vodControlIndex = 0;
     this.vodTrackColumn = 'audio';
     this.vodAudioIndex = 0;
     this.vodTextIndex = 0;
@@ -1641,13 +1943,15 @@ var Playback = {
     this.updateSubtitleLayer();
     Player.aspect = Settings.get('aspect') || 'auto';
     var rememberedTracks = TrackPrefs.get(meta) || {};
-    var requestedSubtitle = rememberedTracks.text || this.generalTrackPreference('text') || 'off';
-    var initialSubtitleContext = this.subtitleContext(Player.pick(false));
+    var requestedSubtitle = meta._sessionSubtitlePreference || rememberedTracks.text || this.generalTrackPreference('text') || 'off';
+    var initialSubtitleContext = this.subtitleContext(this.vodEngineOverride || Player.pick(false));
     var storedManifest = SubtitleStrategy.getManifest(initialSubtitleContext);
     Player.play(meta.url, {
       live: false,
+      engine: this.vodEngineOverride,
       format: meta.extension || 'vod',
       startAt: meta.startAt || 0,
+      videoInfo: meta.videoInfo || null,
       /* Varsayilan Kapali'dir. Kullanici genel bir dil veya bu dizi icin
          daha once bir parca sectiyse o acik tercih uygulanir. */
       subtitlePreference: requestedSubtitle,
@@ -1670,6 +1974,7 @@ var Playback = {
       onReady: function () {
         self.vodReady = true;
         self.loadVodTracks(true);
+        if (meta._resumePaused && !Player.paused) Player.toggle();
         self.showVodInfo(4000);
       },
       onTime: function (pos, dur) {
@@ -1768,7 +2073,8 @@ var Playback = {
     this.vodTracks = Player.refreshTracks();
     if (applyPreference) {
       var pref = TrackPrefs.get(this.vodMeta);
-      var audioPreference = pref && pref.audio ? pref.audio : this.generalTrackPreference('audio');
+      var audioPreference = this.vodMeta._sessionAudioPreference ||
+        (pref && pref.audio ? pref.audio : this.generalTrackPreference('audio'));
       if (audioPreference) {
         var audio = Player.trackByPreference('audio', audioPreference);
         if (audio) Player.selectAudio(audio.index);
@@ -1790,12 +2096,10 @@ var Playback = {
 
   vodControls: function () {
     return [
-      { id: 'back', label: '\u221210 sn' },
-      { id: 'toggle', label: Player.paused ? 'Oynat' : 'Duraklat' },
-      { id: 'forward', label: '+30 sn' },
       { id: 'tracks', label: 'Ses ve Altyazi' },
       { id: 'subtitleSize', label: 'Yazi: ' + this.subtitleSizeLabel() },
-      { id: 'aspect', label: 'Goruntu' }
+      { id: 'aspect', label: 'Goruntu: ' + Player.aspectLabel(Player.aspect) },
+      { id: 'engine', label: 'Motor: ' + String(Player.engine || Player.pick(false)).toUpperCase() }
     ];
   },
 
@@ -1955,6 +2259,7 @@ var Playback = {
         var item = list[i];
         var isCurrent = current(item, i);
         h += '<div class="track-row' + (item.action ? ' compatibility' : '') +
+          (item.disabled ? ' disabled' : '') +
           (focused && i === selected ? ' focus' : '') +
           (isCurrent ? ' current' : '') + '"><span class="track-check">' + (isCurrent ? '\u2713' : '') +
           '</span><span>' + esc(item.label) + '</span></div>';
@@ -1966,10 +2271,15 @@ var Playback = {
   subtitleRows: function () {
     var state = this.vodTracks || Player.emptyTracks();
     var rows = [{ index: 'off', label: 'Kapali', preferenceKey: 'off' }].concat(state.text);
-    if (Player.canStartSubtitleCompatibility()) {
+    if (state.text.length && (!Player.showSubtitleCompatibilityAction || Player.showSubtitleCompatibilityAction())) {
+      var busy = Player.subtitleCompatibilityBusy && Player.subtitleCompatibilityBusy();
       rows.push({
         index: 'compatibility', action: 'compatibility',
-        label: 'Altyazi gorunmuyor? Uyumluluk modunu calistir'
+        disabled: !!busy,
+        label: busy ? 'Altyazi uyumlulugu hazirlaniyor...'
+          : (Player._softwareSubtitleTrack
+            ? 'Altyaziyi yeniden incele / hazirla'
+            : 'Altyazi gorunmuyor? Uyumluluk modunu calistir')
       });
     }
     return rows;
@@ -2025,8 +2335,10 @@ var Playback = {
       selected = textRows[this.vodTextIndex];
       if (!selected) return;
       if (selected.action === 'compatibility') {
+        if (selected.disabled) { UI.toast('Altyazi islemi halen devam ediyor', 3000); return; }
         ok = Player.startSubtitleCompatibility();
-        UI.toast(ok ? 'Altyazi uyumluluk modu baslatiliyor' : 'Uyumluluk modu baslatilamadi', 4000);
+        UI.toast(ok ? 'Altyazi uyumluluk modu baslatiliyor'
+          : (this.vodTracks.subtitlesOff ? 'Once bir altyazi dili secin' : 'Uyumluluk modu baslatilamadi'), 4000);
       } else {
         ok = Player.selectSubtitle(selected.index);
         if (ok) TrackPrefs.set(this.vodMeta, 'text', selected.preferenceKey);
@@ -2041,18 +2353,91 @@ var Playback = {
     this.renderTrackPanel();
   },
 
+  openAspectPanel: function () {
+    if (this.osdTimer) { clearTimeout(this.osdTimer); this.osdTimer = null; }
+    this.vodPanel = 'aspect';
+    this.osdOn = true;
+    this.vodAspectIndex = Player.aspectOrder.indexOf(Player.normalizeAspect(Player.aspect));
+    if (this.vodAspectIndex < 0) this.vodAspectIndex = 0;
+    this.overlay().className = 'on';
+    this.renderAspectPanel();
+    this.updateSubtitleLayer();
+  },
+
+  renderAspectPanel: function () {
+    var rows = '';
+    for (var i = 0; i < Player.aspectOrder.length; i++) {
+      var mode = Player.aspectOrder[i];
+      var unsupported = Player.isUnsupportedAvCrop && Player.isUnsupportedAvCrop(mode);
+      rows += '<div class="aspect-row' + (i === this.vodAspectIndex ? ' focus' : '') +
+        (mode === Player.normalizeAspect(Player.aspect) ? ' current' : '') +
+        (unsupported ? ' unsupported' : '') + '">' +
+        '<span class="aspect-check">' + (mode === Player.normalizeAspect(Player.aspect) ? '\u2713' : '') + '</span>' +
+        '<span>' + esc(Player.aspectLabel(mode)) + (unsupported ? ' · HTML5 gerekli' : '') + '</span></div>';
+    }
+    this.overlay().innerHTML = '<div class="aspect-shade"><div class="aspect-panel">' +
+      '<div class="aspect-title">Goruntu bicimi</div>' +
+      '<div class="aspect-sub">Motor degismeden donanimsal goruntu yerlesimi uygulanir</div>' +
+      '<div class="aspect-list">' + rows + '</div>' +
+      '<div class="aspect-help">\u2191\u2193 Secim &nbsp; · &nbsp; OK Uygula &nbsp; · &nbsp; Geri Oynatici</div>' +
+      '</div></div>';
+  },
+
+  moveAspectSelection: function (delta) {
+    this.vodAspectIndex = Math.max(0, Math.min(Player.aspectOrder.length - 1, this.vodAspectIndex + delta));
+    this.renderAspectPanel();
+  },
+
+  selectAspect: function () {
+    var mode = Player.aspectOrder[this.vodAspectIndex] || 'auto';
+    if (Player.isUnsupportedAvCrop && Player.isUnsupportedAvCrop(mode)) {
+      UI.toast('Bu kirpma modu AVPlay ile uygulanamiyor. HTML5 oynatma motorunu secip tekrar deneyin.', 5200);
+      this.renderAspectPanel();
+      return;
+    }
+    var name = Player.setAspect(mode, 'aspect');
+    this.renderAspectPanel();
+    UI.toast(Player.lastAspectApplied ? 'Goruntu bicimi: ' + name : 'Goruntu bicimi uygulanamadi', 3200);
+  },
+
+  switchVodEngine: function () {
+    if (this.mode !== 'vod' || !this.vodMeta || Player.isPreparing()) {
+      UI.toast('Oynatici hazirken motor degistirilebilir'); return;
+    }
+    var target = Player.engine === 'avplay' ? 'html5' : 'avplay';
+    if (target === 'avplay' && !Player.hasAvplay()) { UI.toast('Bu cihazda AVPlay kullanilamiyor'); return; }
+    var meta = {}, key;
+    for (key in this.vodMeta) if (Object.prototype.hasOwnProperty.call(this.vodMeta, key) && key.charAt(0) !== '_') meta[key] = this.vodMeta[key];
+    meta.startAt = Player.position();
+    meta._resumePaused = !!Player.paused;
+    var trackState = Player.tracks || Player.emptyTracks();
+    var audioTrack = Player.trackByIndex('audio', trackState.currentAudio);
+    var textTrack = trackState.subtitlesOff ? null : Player.trackByIndex('text', trackState.currentText);
+    if (audioTrack) meta._sessionAudioPreference = audioTrack.preferenceKey;
+    meta._sessionSubtitlePreference = textTrack ? textTrack.preferenceKey : 'off';
+    Resume.save(meta.kind, meta.id, meta.startAt, Player.duration(), meta.name);
+    if (this.saveTimer) { clearInterval(this.saveTimer); this.saveTimer = null; }
+    var token = ++this.vodSwitchToken, self = this;
+    this.vodReady = false;
+    this.vodPanel = 'preparing';
+    this.osdOn = true;
+    this.overlay().className = 'on';
+    this.overlay().innerHTML = '<div class="player-msg"><div class="big">Oynatma motoru degistiriliyor</div>' +
+      '<div class="small">' + String(target).toUpperCase() + ' hazirlaniyor<br><br>Tek baglanti icin mevcut oynatici kapatiliyor.</div></div>';
+    Player.stop(true);
+    setTimeout(function () {
+      if (token !== self.vodSwitchToken || self.mode !== 'vod') return;
+      self.startVod(meta, target);
+    }, 500);
+  },
+
   runVodControl: function () {
     var control = this.vodControls()[this.vodControlIndex];
     if (!control) return;
-    if (control.id === 'back') Player.seek(-10);
-    else if (control.id === 'toggle') Player.toggle();
-    else if (control.id === 'forward') Player.seek(30);
-    else if (control.id === 'tracks') { this.openTrackPanel(); return; }
+    if (control.id === 'tracks') { this.openTrackPanel(); return; }
     else if (control.id === 'subtitleSize') this.cycleSubtitleSize();
-    else if (control.id === 'aspect') {
-      var name = Player.cycleAspect();
-      UI.toast(Player.lastAspectApplied ? 'Goruntu formati: ' + name : 'Goruntu modu uygulanamadi');
-    }
+    else if (control.id === 'aspect') { this.openAspectPanel(); return; }
+    else if (control.id === 'engine') { this.switchVodEngine(); return; }
     this.showVodControls(6000);
   },
 
@@ -2063,7 +2448,6 @@ var Playback = {
     if (Diag.visible) { if (c === KEY.BACK || c === KEY.ENTER) Diag.hide(); return; }
 
     if (c === KEY.STOP) { this.exit(); return; }
-    if (c === KEY.RED) { Diag.toggle(); return; }
     if (c === KEY.INFO && this.vodTechnicalInfo) { Diag.render(); return; }
 
     if (this.vodPanel === 'preparing') {
@@ -2081,6 +2465,17 @@ var Playback = {
       if (c === KEY.DOWN) { this.moveTrackSelection(1); return; }
       if (c === KEY.ENTER) { this.selectFocusedTrack(); return; }
       if (c === KEY.BACK || c === KEY.ESC) { this.showVodControls(6000); return; }
+      return;
+    }
+
+    if (this.vodPanel === 'aspect') {
+      if (c === KEY.PLAYPAUSE || c === KEY.PLAY || c === KEY.PAUSE) {
+        Player.toggle(); this.renderAspectPanel(); return;
+      }
+      if (c === KEY.UP) { this.moveAspectSelection(-1); return; }
+      if (c === KEY.DOWN) { this.moveAspectSelection(1); return; }
+      if (c === KEY.ENTER) { this.selectAspect(); return; }
+      if (c === KEY.BACK || c === KEY.ESC || c === KEY.LEFT) { this.showVodControls(6000); return; }
       return;
     }
 
@@ -2103,12 +2498,6 @@ var Playback = {
       if (c === KEY.DOWN) { this.showVodInfo(4000); return; }
       if (c === KEY.INFO) { this.showVodInfo(7000, true); return; }
       if (c === KEY.UP) { this.showVodControls(6000); return; }
-      if (c === KEY.BLUE) {
-        var menuAspect = Player.cycleAspect();
-        this.showVodControls(6000);
-        UI.toast(Player.lastAspectApplied ? 'Goruntu formati: ' + menuAspect : 'Goruntu modu uygulanamadi');
-        return;
-      }
       return;
     }
 
@@ -2125,7 +2514,7 @@ var Playback = {
     if (c === KEY.LEFT || c === KEY.RW) { Player.seek(-10); this.showVodInfo(3500); return; }
     if (c === KEY.RIGHT || c === KEY.FF) { Player.seek(30); this.showVodInfo(3500); return; }
     if (c === KEY.UP) {
-      this.vodControlIndex = 3; /* Yukari + OK ile dogrudan Ses ve Altyazi. */
+      this.vodControlIndex = 0; /* Yukari + OK ile dogrudan Ses ve Altyazi. */
       this.showVodControls(6000); return;
     }
     if (c === KEY.DOWN) {
@@ -2134,14 +2523,6 @@ var Playback = {
       return;
     }
     if (c === KEY.INFO) { this.showVodInfo(7000, true); return; }
-    if (c === KEY.BLUE) {
-      var aspectName = Player.cycleAspect();
-      this.showVodInfo(4000);
-      UI.toast(Player.lastAspectApplied
-        ? 'Goruntu formati: ' + aspectName
-        : 'Bu goruntu modu oynatici tarafindan uygulanamadi', 3200);
-      return;
-    }
     if (c === KEY.BACK || c === KEY.ESC) {
       if (this.vodPanel === 'info') this.hideVodOverlay();
       else this.exit();
@@ -2160,6 +2541,8 @@ var Playback = {
     this.osdTimer = setTimeout(function () {
       self.osdOn = false;
       self.liveTechnicalInfo = false;
+      self.liveInfoCard = false;
+      ov.className = '';
       ov.innerHTML = '';
     }, ms || 4000);
   },
@@ -2189,6 +2572,7 @@ var Playback = {
   },
 
   exit: function (focusCategories) {
+    this.vodSwitchToken++;
     if (this.mode === 'vod' && this.vodMeta) {
       Resume.save(this.vodMeta.kind, this.vodMeta.id, Player.position(), Player.duration(), this.vodMeta.name);
     }
@@ -2215,7 +2599,6 @@ var Playback = {
     this.overlay().className = '';
     this.overlay().innerHTML = '';
     this.mode = null;
-    this.channelListOn = false;
     this.recentChannelsOn = false;
     this.vodPanel = 'hidden';
     this.vodTracks = null;
@@ -2234,16 +2617,37 @@ var Playback = {
     return {
       cats: null, grid: null, currentCat: null, timer: null,
       searchInput: null, searchQuery: '', searchTimer: null, searchToken: 0,
-      restoreRequested: false, savedCatId: null, savedCatIndex: 0, savedGridIndex: 0,
+      restoreRequested: false, restoreSearchRequested: false,
+      savedCatId: null, savedCatIndex: 0, savedGridIndex: 0,
+      savedSearch: null, searchBaseIndex: 0,
       beginView: function (restore) {
-        this.restoreRequested = !!restore && this.savedCatId != null;
-        this.resetSearch();
+        if (!restore) this.savedSearch = null;
+        this.restoreSearchRequested = !!restore && !!this.savedSearch;
+        this.restoreRequested = !!restore && !this.restoreSearchRequested && this.savedCatId != null;
+        if (this.timer) clearTimeout(this.timer);
+        if (this.searchTimer) clearTimeout(this.searchTimer);
+        this.currentCat = null;
+        this.searchQuery = this.restoreSearchRequested ? this.savedSearch.query : '';
+        this.searchBaseIndex = this.restoreSearchRequested ? this.savedSearch.baseGridIndex : 0;
+        this.searchToken++;
+        if (this.searchInput) this.searchInput.value = this.restoreSearchRequested ? this.savedSearch.raw : '';
+        var state = document.getElementById('g-search-state');
+        if (state) state.textContent = this.restoreSearchRequested ? this.savedSearch.items.length + ' sonuc' : '';
       },
       remember: function () {
         if (!this.currentCat || !this.cats || !this.grid) return;
         this.savedCatId = this.currentCat.category_id;
         this.savedCatIndex = this.cats.index;
         this.savedGridIndex = this.grid.index;
+        if (this.searchQuery.length >= 3) {
+          this.savedSearch = {
+            raw: this.searchInput ? this.searchInput.value : this.searchQuery,
+            query: this.searchQuery,
+            items: this.grid.items.slice(0),
+            gridIndex: this.grid.index,
+            baseGridIndex: this.searchBaseIndex
+          };
+        } else this.savedSearch = null;
       },
       resetSearch: function () {
         if (this.timer) clearTimeout(this.timer);
@@ -2254,6 +2658,38 @@ var Playback = {
         if (this.searchInput) this.searchInput.value = '';
         var state = document.getElementById('g-search-state');
         if (state) state.textContent = '';
+      },
+      restoreSearch: function () {
+        var saved = this.savedSearch;
+        if (!saved || !this.grid) return;
+        this.searchQuery = saved.query;
+        this.searchBaseIndex = saved.baseGridIndex;
+        if (this.searchInput) this.searchInput.value = saved.raw;
+        this.grid.emptyText = 'Aramanizla eslesen icerik bulunamadi';
+        this.grid.setItems(saved.items.slice(0));
+        this.grid.jumpTo(Math.max(0, Math.min(saved.gridIndex, saved.items.length - 1)));
+        var title = document.getElementById('g-title'), count = document.getElementById('g-count');
+        var state = document.getElementById('g-search-state');
+        if (title) title.textContent = 'Arama: ' + saved.raw;
+        if (count) count.textContent = saved.items.length + ' baslik';
+        if (state) state.textContent = saved.items.length + ' sonuc';
+        this.restoreSearchRequested = false;
+        Nav.focus('grid');
+      },
+      clearSearchResults: function () {
+        if (this.searchTimer) clearTimeout(this.searchTimer);
+        this.searchQuery = '';
+        this.searchToken++;
+        if (this.searchInput) this.searchInput.value = '';
+        var state = document.getElementById('g-search-state');
+        if (state) state.textContent = '';
+        this.savedSearch = null;
+        if (!this.currentCat) return;
+        this.savedCatId = this.currentCat.category_id;
+        this.savedGridIndex = this.searchBaseIndex || 0;
+        this.restoreRequested = true;
+        this._load(this.currentCat);
+        Nav.focus('grid');
       },
       search: function (value) {
         var self = this;
@@ -2271,6 +2707,7 @@ var Playback = {
           return;
         }
 
+        if (this.searchQuery.length < 3) this.searchBaseIndex = this.grid ? this.grid.index : 0;
         this.searchQuery = q;
         if (this.timer) clearTimeout(this.timer);
         var token = ++this.searchToken;
@@ -2310,15 +2747,18 @@ var Playback = {
           list = CategoryVisibility.visibleList(kind, list);
           var all = [{ category_id: '__all', category_name: 'Tumu' }].concat(list);
           self.cats.setItems(all);
-          if (self.restoreRequested) {
+          if (self.restoreRequested || self.restoreSearchRequested) {
             var found = -1;
             for (var i = 0; i < all.length; i++) {
               if (String(all[i].category_id) === String(self.savedCatId)) { found = i; break; }
             }
             if (found < 0 && self.savedCatIndex < all.length) found = self.savedCatIndex;
+            if (found < 0 && self.restoreSearchRequested && all.length) found = 0;
             if (found >= 0) {
               self.savedCatId = all[found].category_id;
+              self.currentCat = all[found];
               self.cats.jumpTo(found);
+              if (self.restoreSearchRequested) self.restoreSearch();
             }
           }
         })['catch'](function (e) {

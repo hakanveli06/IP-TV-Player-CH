@@ -8,10 +8,14 @@ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 
 assert(app.includes("if (c === KEY.LEFT) { this.togglePreviousChannel(); return; }"), 'Canli Sol tus onceki kanali acmali');
 assert(app.includes("if (c === KEY.RIGHT) { this.showRecentChannels(); return; }"), 'Canli Sag tus son kanallari acmali');
+assert(app.includes("if (c === KEY.UP) { this.toggleLiveInfoCard(); return; }"), 'Canli Yukari tus bilgi kartini acmali');
+assert(app.includes("if (c === KEY.DOWN) { this.openLiveDailyEpg(); return; }"), 'Canli Asagi tus gunluk EPG acmali');
+assert(app.includes("if (c === KEY.ENTER) { this.returnToPreview(); return; }"), 'Canli OK dogrudan on izlemeye donmeli');
+assert(!app.includes('showChannelList:'), 'Eski ara kanal secici uretim kodundan kaldirilmali');
 assert(app.includes("Api.shortEpg(ch.stream_id, 100)"), 'Gunluk EPG yeterli program istemeli');
 assert(app.includes("list = CategoryVisibility.visibleList('live', list)"));
 assert(app.includes('list = CategoryVisibility.visibleList(kind, list)'));
-assert(app.includes("var requestedSubtitle = rememberedTracks.text || this.generalTrackPreference('text') || 'off'"));
+assert(app.includes("var requestedSubtitle = meta._sessionSubtitlePreference || rememberedTracks.text || this.generalTrackPreference('text') || 'off'"));
 assert(views.includes("App.live.openDailyEpg(chans.items[chans.index])"));
 assert(views.includes("Views.categoryVisibility = function (kind)"));
 assert(views.includes("Views.favoriteOrder = function ()"));

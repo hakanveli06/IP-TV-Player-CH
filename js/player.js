@@ -26,7 +26,7 @@ var Player = {
   _lastVideoFrameAt: 0,
   aspect: 'auto',
   lastAspectApplied: true,
-  aspectOrder: ['auto', 'letterbox', 'fullscreen'],
+  aspectOrder: ['auto', 'ratio16x9', 'cinema21x9', 'ratio4x3', 'zoom4x3', 'zoom21x9'],
   tracks: null,
   subtitleMuted: null,
   _subtitleTimer: null,
@@ -60,11 +60,18 @@ var Player = {
   _statsSample: null,
   _decodedRateBps: 0,
   _decodedFps: 0,
+  _avVideoSize: null,
+  _sourceVideoInfo: null,
+  _engineOverride: null,
+  _nativeReselectTimer: null,
+  _nativeReselectBufferDone: false,
+  _nativeReselectPlaytimeDone: false,
   displayRect: null,
   _viewportTimer: null,
+  _viewportApplyCount: 0,
 
   previewBodyClass: function () {
-    return 'playing live-preview';
+    return 'playing live-preview' + (this.engine === 'avplay' ? ' av-preview' : ' html5-preview');
   },
 
   syncBodyClass: function () {
@@ -81,67 +88,306 @@ var Player = {
     node.style.width = r.width + 'px'; node.style.height = r.height + 'px';
   },
 
+  tizenVersion: function () {
+    var ua = '';
+    try { ua = navigator.userAgent || ''; } catch (e) { }
+    var match = ua.match(/Tizen[\s\/]+(\d+(?:\.\d+)?)/i);
+    return match ? Number(match[1]) : 0;
+  },
+
+  avCompatibilityLabel: function (mode) {
+    return {
+      auto: 'Otomatik (önerilen)',
+      legacySync: 'Eski TV modu: Açık',
+      standard: 'Eski TV modu: Kapalı'
+    }[mode] || 'Otomatik';
+  },
+
+  avCompatibilityPreference: function () {
+    try { return Settings.get('avplayCompatibility') || 'auto'; }
+    catch (e) { return 'auto'; }
+  },
+
+  resolvedAvCompatibility: function () {
+    var selected = this.avCompatibilityPreference();
+    if (selected !== 'auto') return selected;
+    var version = this.tizenVersion();
+    /* Q60R ailesinin kullandigi Tizen 5.0'da oynatma sirasinda yalnizca
+       setDisplayRect cagirmak bazen goruntu alanini yenilemiyor. Bilinmeyen
+       ve yeni cihazlarda v1.17.0'in dogrulanmis davranisini koru. */
+    return version > 0 && version <= 5.0 ? 'legacySync' : 'standard';
+  },
+
+  avCompatibilityDiagnostics: function (stage) {
+    var selected = this.avCompatibilityPreference();
+    var resolved = this.resolvedAvCompatibility();
+    var version = this.tizenVersion();
+    Diag.set('Tizen surumu', version ? String(version) : 'algilanamadi');
+    Diag.set('AVPlay uyumluluk secimi', this.avCompatibilityLabel(selected));
+    Diag.set('AVPlay uyumluluk yontemi', this.avCompatibilityLabel(resolved));
+    if (stage) Diag.set('AVPlay alan gecisi', stage);
+    return resolved;
+  },
+
   applyViewportStyles: function () {
     var logical = this.displayRect || { x: 0, y: 0, width: 1920, height: 1080 };
     var els = this.els();
-    this.setNodeRect(els.av, this.nativeDisplayRect());
+    /* AVPlay donanim katmani DOM kutusundan bagimsizdir. AU8000'de nesneyi
+       kucultmek ses gelirken goruntunun kaybolmasina yol aciyor. OTTplay ile
+       dogrulanan duzende object daima tam ekran, yalnizca yerel video alani
+       setDisplayRect ile degisir. */
+    var avRect = { x: 0, y: 0, width: 1920, height: 1080 };
+    if (this.engine === 'avplay' && this.resolvedAvCompatibility() !== 'standard') avRect = logical;
+    this.setNodeRect(els.av, avRect);
     this.setNodeRect(els.v, logical);
+    if (this.engine === 'avplay') {
+      Diag.set('AVPlay DOM alani', [avRect.x, avRect.y, avRect.width, avRect.height].join(' / '));
+    }
   },
 
   setViewport: function (rect) {
+    var wasPreview = !!this.displayRect;
     this.displayRect = rect || null;
     var r = rect || { x: 0, y: 0, width: 1920, height: 1080 };
     this.applyViewportStyles();
     if (this.playing) this.syncBodyClass();
-    this.applyAspect();
     if (this._viewportTimer) { clearTimeout(this._viewportTimer); this._viewportTimer = null; }
-    if (this.playing && this.engine === 'avplay') {
-      var self = this, token = this._sessionId;
-      this._viewportTimer = setTimeout(function () {
-        self._viewportTimer = null;
-        if (token === self._sessionId && self.playing && self.engine === 'avplay') self.applyAspect();
-      }, 150);
-    }
+    var transition = wasPreview && !rect;
+    var method = this.engine === 'avplay' ? this.avCompatibilityDiagnostics(
+      transition ? 'On izlemeden tam ekrana' : (rect ? 'On izleme alani' : 'Tam ekran alani')) : 'standard';
+    this.applyAspect();
+    if (this.playing && this.engine === 'avplay') this.scheduleViewportReapply(method);
     var actual = this.engine === 'avplay' ? this.nativeDisplayRect() : r;
     Diag.set('Video penceresi', [actual.x, actual.y, actual.width, actual.height].join(' / '));
   },
 
+  scheduleViewportReapply: function (method) {
+    var self = this, token = this._sessionId;
+    var delay = method === 'standard' ? 150 : 260;
+    this._viewportTimer = setTimeout(function () {
+      self._viewportTimer = null;
+      if (token !== self._sessionId || !self.playing || self.engine !== 'avplay') return;
+      if (method === 'standard') self.applyAspect();
+      else self.applyLegacyAvLayout('gecikmeli tekrar');
+    }, delay);
+  },
+
   aspectLabel: function (mode) {
-    return { auto: 'Otomatik', letterbox: 'Orani koru', fullscreen: '16:9 doldur' }[mode] || 'Otomatik';
+    return {
+      auto: 'Otomatik', ratio16x9: '16:9', ratio4x3: '4:3',
+      zoom4x3: '4:3 → 16:9 yakinlastir', cinema21x9: '21:9',
+      zoom21x9: '21:9 → 16:9 doldur'
+    }[this.normalizeAspect(mode)] || 'Otomatik';
+  },
+
+  normalizeAspect: function (mode) {
+    /* Onceki surumlerdeki adlari kayip yaratmadan yeni sabit geometrilere tasi. */
+    if (mode === 'fullscreen') return 'ratio16x9';
+    if (mode === 'letterbox') return 'auto';
+    return this.aspectOrder.indexOf(mode) === -1 ? 'auto' : mode;
   },
 
   nextAspect: function (mode) {
+    mode = this.normalizeAspect(mode);
     var i = this.aspectOrder.indexOf(mode);
     if (i < 0) i = 0;
     return this.aspectOrder[(i + 1) % this.aspectOrder.length];
   },
 
+  isUnsupportedAvCrop: function (mode) {
+    mode = this.normalizeAspect(mode);
+    return this.engine === 'avplay' && !this.displayRect &&
+      (mode === 'zoom4x3' || mode === 'zoom21x9');
+  },
+
+  applyDisplayRect: function () {
+    if (this.engine !== 'avplay' || !this.hasAvplay()) return true;
+    return this.applyAvLayout();
+  },
+
+  readAvVideoSize: function () {
+    if (this.engine !== 'avplay' || !this.hasAvplay()) return this._avVideoSize;
+    var width = 0, height = 0, info, i, extra;
+    try {
+      info = webapis.avplay.getVideoSize();
+      width = Number(info && (info.width || info.Width)) || 0;
+      height = Number(info && (info.height || info.Height)) || 0;
+    } catch (e) { }
+    if (!width || !height) {
+      try {
+        info = webapis.avplay.getCurrentStreamInfo();
+        for (i = 0; info && i < info.length; i++) {
+          if (info[i].type !== 'VIDEO') continue;
+          extra = this.parseTrackInfo(info[i].extra_info);
+          width = Number(extra.Width || extra.width) || 0;
+          height = Number(extra.Height || extra.height) || 0;
+          if (width && height) break;
+        }
+      } catch (streamError) { }
+    }
+    if (width > 0 && height > 0) this._avVideoSize = { width: width, height: height };
+    return this._avVideoSize;
+  },
+
+  fitRect: function (width, height) {
+    width = Number(width) || 0; height = Number(height) || 0;
+    return this.fitRatio(width && height ? width / height : 0);
+  },
+
+  ratioNumber: function (value) {
+    if (typeof value === 'number') return isFinite(value) && value > 0 ? value : 0;
+    var match = String(value || '').trim().match(/^(\d+(?:\.\d+)?)\s*[:\/]\s*(\d+(?:\.\d+)?)$/);
+    if (match && Number(match[2]) > 0) return Number(match[1]) / Number(match[2]);
+    var direct = Number(value);
+    return isFinite(direct) && direct > 0 ? direct : 0;
+  },
+
+  sourceDisplayRatio: function () {
+    var info = this._sourceVideoInfo || {};
+    var direct = this.ratioNumber(info.display_aspect_ratio || info.displayAspectRatio || info.dar || info.DAR);
+    if (direct) return direct;
+    var width = Number(info.width || info.Width) || 0;
+    var height = Number(info.height || info.Height) || 0;
+    var sample = this.ratioNumber(info.sample_aspect_ratio || info.sampleAspectRatio || info.sar || info.SAR);
+    if (width && height) return width / height * (sample || 1);
+    return 0;
+  },
+
+  fitRatio: function (sourceRatio) {
+    sourceRatio = Number(sourceRatio) || 0;
+    if (!sourceRatio) return { x: 0, y: 0, width: 1920, height: 1080 };
+    var screenRatio = 1920 / 1080;
+    var outWidth, outHeight, x, y;
+    if (sourceRatio > screenRatio) {
+      outWidth = 1920;
+      outHeight = Math.max(2, Math.round((1920 / sourceRatio) / 2) * 2);
+      x = 0; y = Math.round((1080 - outHeight) / 2);
+    } else {
+      outHeight = 1080;
+      outWidth = Math.max(2, Math.round((1080 * sourceRatio) / 2) * 2);
+      x = Math.round((1920 - outWidth) / 2); y = 0;
+    }
+    return { x: x, y: y, width: outWidth, height: outHeight };
+  },
+
+  avLayout: function () {
+    if (this.displayRect) {
+      return {
+        method: 'PLAYER_DISPLAY_MODE_FULL_SCREEN',
+        rect: this.nativeDisplayRect(), strategy: '16:9 kucuk on izleme'
+      };
+    }
+    var mode = this.normalizeAspect(this.aspect);
+    /* AU8000/Tizen 6.0, ekran disina tasan negatif AVPlay koordinatlarini
+       kabul edilmis gibi raporlasa da kirpma uygulamiyor. Bu iki modda
+       guvenli otomatik yerlesimi koru; arayuz kullaniciyi HTML5'e yonlendirir. */
+    if (this.isUnsupportedAvCrop(mode)) {
+      return {
+        method: 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO',
+        rect: { x: 0, y: 0, width: 1920, height: 1080 },
+        strategy: 'AVPlay kirpma desteklenmiyor · guvenli otomatik', unsupported: true
+      };
+    }
+    var layouts = {
+      ratio16x9: { x: 0, y: 0, width: 1920, height: 1080, strategy: 'zorunlu 16:9' },
+      ratio4x3: { x: 240, y: 0, width: 1440, height: 1080, strategy: 'zorunlu 4:3' },
+      cinema21x9: { x: 0, y: 128, width: 1920, height: 825, strategy: 'zorunlu 21:9 sinema' }
+    };
+    if (layouts[mode]) {
+      return { method: 'PLAYER_DISPLAY_MODE_FULL_SCREEN', rect: layouts[mode], strategy: layouts[mode].strategy };
+    }
+    return { method: 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO',
+      rect: { x: 0, y: 0, width: 1920, height: 1080 }, strategy: 'yerel otomatik' };
+  },
+
+  applyAvLayout: function () {
+    if (this.resolvedAvCompatibility() !== 'standard') {
+      return this.applyLegacyAvLayout('yerlesim uygulamasi');
+    }
+    var plan = this.avLayout(), method = plan.fallbackMethod || plan.method;
+    var methodOk = true, rectOk = true, methodError = null, rectError = null;
+    /* AU8000 icin kritik sira: once goruntu yontemi, sonra hedef alan.
+       Ters sira kabul edilse de ikinci komut kucuk alani bozabiliyor. */
+    try { webapis.avplay.setDisplayMethod(method); }
+    catch (e) { methodOk = false; methodError = e; }
+    try {
+      webapis.avplay.setDisplayRect(plan.rect.x, plan.rect.y, plan.rect.width, plan.rect.height);
+    } catch (e2) { rectOk = false; rectError = e2; }
+    Diag.set('AVPlay goruntu modu', this.aspectLabel(this.aspect) + (this.displayRect ? ' · On izleme' : ''));
+    Diag.set('AVPlay yerlesim', plan.strategy + ' · ' +
+      [plan.rect.x, plan.rect.y, plan.rect.width, plan.rect.height].join(' / '));
+    Diag.set('AVPlay oran komutu', methodOk
+      ? method + ' · kabul edildi'
+      : 'Hata: ' + methodError.name + ' · ' + methodError.message);
+    Diag.set('AVPlay alan komutu', rectOk
+      ? [plan.rect.x, plan.rect.y, plan.rect.width, plan.rect.height].join(' / ') + ' · kabul edildi'
+      : 'Hata: ' + rectError.name + ' · ' + rectError.message);
+    this.lastAspectApplied = methodOk && rectOk && !plan.unsupported;
+    return this.lastAspectApplied;
+  },
+
+  applyLegacyAvLayout: function (stage) {
+    var plan = this.avLayout(), method = plan.fallbackMethod || plan.method;
+    var methodOk = true, rectOk = true, methodError = null, rectError = null;
+    var rect = plan.rect;
+    this._viewportApplyCount++;
+    /* Eski AVPlay katmaninda DOM alani ile yerel alan ayni karede degismeli.
+       Once CSS yerlesimini kesinlestir, sonra setDisplayMethod'in alani geri
+       almasina karsi dikdortgeni komuttan once ve sonra uygula. */
+    this.applyViewportStyles();
+    try {
+      var av = this.els().av;
+      if (av && typeof av.offsetWidth !== 'undefined') { var layoutFlush = av.offsetWidth; }
+    } catch (layoutError) { }
+    try { webapis.avplay.setDisplayRect(rect.x, rect.y, rect.width, rect.height); }
+    catch (e) { rectOk = false; rectError = e; }
+    try { webapis.avplay.setDisplayMethod(method); }
+    catch (e2) { methodOk = false; methodError = e2; }
+    try { webapis.avplay.setDisplayRect(rect.x, rect.y, rect.width, rect.height); }
+    catch (e3) { rectOk = false; rectError = e3; }
+    Diag.set('AVPlay goruntu modu', this.aspectLabel(this.aspect) + (this.displayRect ? ' · On izleme' : ''));
+    Diag.set('AVPlay yerlesim', plan.strategy + ' · ' +
+      [rect.x, rect.y, rect.width, rect.height].join(' / '));
+    Diag.set('AVPlay eski TV uygulamasi', this._viewportApplyCount + ' · ' + (stage || 'uygulandi'));
+    Diag.set('AVPlay oran komutu', methodOk
+      ? method + ' · kabul edildi'
+      : 'Hata: ' + methodError.name + ' · ' + methodError.message);
+    Diag.set('AVPlay alan komutu', rectOk
+      ? [rect.x, rect.y, rect.width, rect.height].join(' / ') + ' · iki kez kabul edildi'
+      : 'Hata: ' + rectError.name + ' · ' + rectError.message);
+    this.lastAspectApplied = methodOk && rectOk && !plan.unsupported;
+    return this.lastAspectApplied;
+  },
+
   applyAspect: function () {
-    var mode = this.aspect || 'auto';
+    var mode = this.normalizeAspect(this.aspect);
+    this.aspect = mode;
     try {
       if (this.engine === 'avplay' && this.hasAvplay()) {
-        var avMode = {
-          auto: 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO',
-          letterbox: 'PLAYER_DISPLAY_MODE_LETTER_BOX',
-          fullscreen: 'PLAYER_DISPLAY_MODE_FULL_SCREEN'
-        }[mode] || 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO';
-        /* AVPlay donanimsal bir yuzeydir; CSS object-fit etki etmez.
-           Tizen 6.0'da mod degisimini gorunur kilmak icin dikdortgeni de tazele. */
-        var r = this.nativeDisplayRect();
-        webapis.avplay.setDisplayRect(r.x, r.y, r.width, r.height);
-        webapis.avplay.setDisplayMethod(avMode);
-        var state = '';
-        try { state = webapis.avplay.getState(); } catch (stateError) { }
-        Diag.set('AVPlay goruntu modu', this.aspectLabel(mode) + (state ? ' [' + state + ']' : ''));
+        return this.applyAvLayout();
       } else {
         var v = this.els().v;
-        v.style.objectFit = mode === 'fullscreen' ? 'fill' : 'contain';
+        if (this.displayRect) {
+          this.setNodeRect(v, this.displayRect);
+          v.style.objectFit = 'fill';
+        } else {
+          var htmlLayouts = {
+            ratio16x9: { x: 0, y: 0, width: 1920, height: 1080 },
+            ratio4x3: { x: 240, y: 0, width: 1440, height: 1080 },
+            zoom4x3: { x: 0, y: -180, width: 1920, height: 1440 },
+            cinema21x9: { x: 0, y: 128, width: 1920, height: 825 },
+            zoom21x9: { x: -300, y: 0, width: 2520, height: 1080 }
+          };
+          this.setNodeRect(v, htmlLayouts[mode] || { x: 0, y: 0, width: 1920, height: 1080 });
+          v.style.objectFit = mode === 'auto' ? 'contain' : 'fill';
+        }
         Diag.set('HTML5 goruntu modu', this.aspectLabel(mode));
       }
       this.lastAspectApplied = true;
       return true;
     } catch (e) {
       this.lastAspectApplied = false;
+      if (this.engine === 'avplay') Diag.set('AVPlay oran komutu', 'Hata: ' + e.name + ' · ' + e.message);
       Diag.add('Goruntu formati uygulanamadi: ' + e.message);
       return false;
     }
@@ -150,6 +396,19 @@ var Player = {
   cycleAspect: function () {
     this.aspect = this.nextAspect(this.aspect);
     Settings.set('aspect', this.aspect);
+    this.lastAspectApplied = this.applyAspect();
+    return this.aspectLabel(this.aspect);
+  },
+
+  setAspect: function (mode, persistKey) {
+    mode = this.normalizeAspect(mode);
+    if (this.isUnsupportedAvCrop(mode)) {
+      this.lastAspectApplied = false;
+      Diag.set('AVPlay goruntu modu', this.aspectLabel(mode) + ' · bu cihazda desteklenmiyor');
+      return this.aspectLabel(mode);
+    }
+    this.aspect = mode;
+    if (persistKey) Settings.set(persistKey, this.aspect);
     this.lastAspectApplied = this.applyAspect();
     return this.aspectLabel(this.aspect);
   },
@@ -171,6 +430,23 @@ var Player = {
     try { return JSON.parse(value); } catch (e) { return {}; }
   },
 
+  trackInfoValue: function (primary, secondary, names) {
+    var sources = [primary || {}, secondary || {}];
+    for (var s = 0; s < sources.length; s++) {
+      var source = sources[s];
+      for (var key in source) {
+        if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+        var normalized = String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (var n = 0; n < names.length; n++) {
+          if (normalized === String(names[n]).toLowerCase().replace(/[^a-z0-9]/g, '') && source[key] != null) {
+            return source[key];
+          }
+        }
+      }
+    }
+    return '';
+  },
+
   normalizeLanguage: function (value) {
     var code = String(value || '').toLowerCase().replace(/_/g, '-').split('-')[0];
     var aliases = {
@@ -190,14 +466,16 @@ var Player = {
     }[code] || String(code || 'Dil belirtilmemiş').toUpperCase();
   },
 
-  makeTrack: function (info, type, order) {
+  makeTrack: function (info, type, order, currentInfo) {
     var extra = this.parseTrackInfo(info && info.extra_info);
-    var rawLang = extra.language || extra.track_lang || extra.lang || '';
+    var currentExtra = this.parseTrackInfo(currentInfo && currentInfo.extra_info);
+    var rawLang = this.trackInfoValue(extra, currentExtra,
+      ['track_lang', 'track_language', 'language', 'lang', 'srclang']);
     var lang = this.normalizeLanguage(rawLang);
     var label = type === 'text' && lang === 'und' ? 'Altyazi ' + (order + 1) : this.languageLabel(lang);
-    var codec = String(extra.fourCC || extra.codec || '').toUpperCase();
+    var codec = String(this.trackInfoValue(extra, currentExtra, ['fourCC', 'codec', 'codec_name']) || '').toUpperCase();
     if (type === 'audio') {
-      var channels = parseInt(extra.channels, 10);
+      var channels = parseInt(this.trackInfoValue(extra, currentExtra, ['channels', 'channel_count']), 10);
       if (channels === 1) label += ' · Mono';
       else if (channels === 2) label += ' · Stereo';
       else if (channels >= 6) label += ' · 5.1';
@@ -231,16 +509,17 @@ var Player = {
       if (this.engine === 'avplay' && this.hasAvplay()) {
         var total = webapis.avplay.getTotalTrackInfo() || [];
         var current = webapis.avplay.getCurrentStreamInfo() || [];
-        var currentAudio = null, currentText = null;
+        var currentAudio = null, currentText = null, currentByIndex = {};
         for (var c = 0; c < current.length; c++) {
           var currentType = String(current[c].type || '').toUpperCase();
+          currentByIndex[String(current[c].index)] = current[c];
           if (currentType === 'AUDIO' && current[c].index >= 0) currentAudio = current[c].index;
           if (currentType === 'TEXT' && current[c].index >= 0) currentText = current[c].index;
         }
         for (var i = 0; i < total.length; i++) {
           var type = String(total[i].type || '').toUpperCase();
-          if (type === 'AUDIO') result.audio.push(this.makeTrack(total[i], 'audio', result.audio.length));
-          if (type === 'TEXT') result.text.push(this.makeTrack(total[i], 'text', result.text.length));
+          if (type === 'AUDIO') result.audio.push(this.makeTrack(total[i], 'audio', result.audio.length, currentByIndex[String(total[i].index)]));
+          if (type === 'TEXT') result.text.push(this.makeTrack(total[i], 'text', result.text.length, currentByIndex[String(total[i].index)]));
         }
         result.supported = true;
         result.audioSupported = true;
@@ -274,9 +553,37 @@ var Player = {
     }
     this.tracks = result;
     this._decorateSoftwareTracks();
+    this._applyLearnedTrackLabels();
     this._numberTextTracks();
+    this._rememberTrackLabels();
     Diag.set('Medya parcalari', result.audio.length + ' ses / ' + result.text.length + ' altyazi');
     return result;
+  },
+
+  _applyLearnedTrackLabels: function () {
+    if (typeof TrackLabels === 'undefined' || !this.cb || !this.cb.subtitleCacheKey || !this.tracks) return;
+    var learned = TrackLabels.get(this.cb.subtitleCacheKey);
+    if (!learned) return;
+    var groups = [{ list: this.tracks.audio, langs: learned.audio }, { list: this.tracks.text, langs: learned.text }];
+    for (var g = 0; g < groups.length; g++) {
+      for (var i = 0; i < groups[g].list.length; i++) {
+        var item = groups[g].list[i], lang = this.normalizeLanguage(groups[g].langs && groups[g].langs[item.sourceIndex]);
+        if (item.lang !== 'und' || lang === 'und') continue;
+        item.lang = lang;
+        item.label = this.languageLabel(lang);
+        item.preferenceKey = 'lang:' + lang;
+      }
+    }
+  },
+
+  _rememberTrackLabels: function () {
+    if (typeof TrackLabels === 'undefined' || !this.cb || !this.cb.subtitleCacheKey || !this.tracks) return;
+    function langs(list) {
+      var out = [];
+      for (var i = 0; i < list.length; i++) out[list[i].sourceIndex] = list[i].lang || 'und';
+      return out;
+    }
+    TrackLabels.set(this.cb.subtitleCacheKey, langs(this.tracks.audio), langs(this.tracks.text));
   },
 
   _decorateSoftwareTracks: function () {
@@ -400,6 +707,9 @@ var Player = {
     if (!off && !track) return false;
     this._requestedSubtitlePreference = off ? 'off' : track.preferenceKey;
     this.cb.subtitlePreference = this._requestedSubtitlePreference;
+    if (this._nativeReselectTimer) { clearTimeout(this._nativeReselectTimer); this._nativeReselectTimer = null; }
+    this._nativeReselectBufferDone = false;
+    this._nativeReselectPlaytimeDone = false;
     var strategyMode = this.subtitleStrategyMode();
 
     /* Daha once sorunlu oldugu ogrenilen kaynakta ilk secimde guvenli TX3G
@@ -479,14 +789,31 @@ var Player = {
     if (this.live || this._preparing || !this._engineStarted || !this._readyAt) return false;
     if (!this.tracks || this.tracks.subtitlesOff || this.tracks.currentText == null) return false;
     var track = this.trackByIndex('text', this.tracks.currentText);
-    if (!track || this._nativeSubtitleProven || this._softwareSubtitleTrack) return false;
-    return true;
+    return !!track;
+  },
+
+  showSubtitleCompatibilityAction: function () {
+    return !this.live && !!(this.tracks && this.tracks.text && this.tracks.text.length);
+  },
+
+  subtitleCompatibilityBusy: function () {
+    return !!(this._preparing || this._softwareInspecting || this._softwareLoadingIndex != null);
   },
 
   startSubtitleCompatibility: function () {
     if (!this.canStartSubtitleCompatibility()) return false;
     var track = this.trackByIndex('text', this.tracks.currentText);
     if (!track) return false;
+    /* Eylem panelde daima kalir. Yazilimsal altyazi zaten calisiyorsa tekrar
+       secim, kaynagi yeniden inceler; varsa dogrulanmis cihaz onbellegi hizli
+       bicimde yeniden kullanilir. */
+    if (this._softwareSubtitleTrack) {
+      this._softwareSubInfo = null;
+      this._softwareSubtitleTrack = null;
+      this._softwareSubtitleCues = null;
+      this._softwareLastText = '';
+      this._emitSubtitle('');
+    }
     this._requestedSubtitlePreference = track.preferenceKey;
     this.cb.subtitlePreference = track.preferenceKey;
     this.subtitleMuted = false;
@@ -964,6 +1291,30 @@ var Player = {
     }
   },
 
+  _scheduleNativeSubtitleReselect: function (reason) {
+    if (this.live || this.engine !== 'avplay' || this.subtitleMuted === true ||
+      !this.tracks || this.tracks.currentText == null || this._softwareSubtitleTrack || this._preparing) return;
+    if (reason === 'buffer') {
+      if (this._nativeReselectBufferDone) return;
+      this._nativeReselectBufferDone = true;
+    } else {
+      if (this._nativeReselectPlaytimeDone) return;
+      this._nativeReselectPlaytimeDone = true;
+    }
+    if (this._nativeReselectTimer) clearTimeout(this._nativeReselectTimer);
+    var self = this, token = this._sessionId, index = this.tracks.currentText;
+    this._nativeReselectTimer = setTimeout(function () {
+      self._nativeReselectTimer = null;
+      if (token !== self._sessionId || self.engine !== 'avplay' || self.subtitleMuted === true ||
+        !self.tracks || String(self.tracks.currentText) !== String(index) || self._softwareSubtitleTrack) return;
+      try {
+        webapis.avplay.setSelectTrack('TEXT', index);
+        webapis.avplay.setSilentSubtitle(false);
+        Diag.set('Altyazi yeniden secimi', reason === 'buffer' ? 'Tamponlama sonrasi' : 'Ilk oynatma zamani');
+      } catch (e) { Diag.add('Altyazi yeniden secilemedi: ' + e.message); }
+    }, 200);
+  },
+
   clearSubtitle: function () {
     if (this._subtitleTimer) { clearTimeout(this._subtitleTimer); this._subtitleTimer = null; }
     this._htmlSubtitleTrack = null;
@@ -981,9 +1332,9 @@ var Player = {
     return Settings.get(key) || Settings.get('engine') || 'auto';
   },
 
-  pick: function (live) {
+  pick: function (live, override) {
     if (live == null) live = this.live;
-    var pref = this.enginePreference(!!live);
+    var pref = override || this.enginePreference(!!live);
     if (pref === 'html5') return 'html5';
     if (pref === 'avplay') return this.hasAvplay() ? 'avplay' : 'html5';
     return this.hasAvplay() ? 'avplay' : 'html5';
@@ -1056,6 +1407,13 @@ var Player = {
     this._statsSample = null;
     this._decodedRateBps = 0;
     this._decodedFps = 0;
+    this._avVideoSize = null;
+    this._sourceVideoInfo = opts.videoInfo || null;
+    this._engineOverride = opts.engine === 'avplay' || opts.engine === 'html5' ? opts.engine : null;
+    this._viewportApplyCount = 0;
+    if (this._nativeReselectTimer) { clearTimeout(this._nativeReselectTimer); this._nativeReselectTimer = null; }
+    this._nativeReselectBufferDone = false;
+    this._nativeReselectPlaytimeDone = false;
     if (!this.live && opts.subtitleManifest && opts.subtitleManifest.tracks) {
       this._softwareSubInfo = {
         kind: opts.subtitleManifest.kind || 'mp4',
@@ -1070,11 +1428,13 @@ var Player = {
     this._seekQueuedTarget = null;
     this._seekTarget = this._pendingSeek;
     this._seekPreviewUntil = 0;
-    this.aspect = this.live ? 'letterbox' : (Settings.get('aspect') || 'auto');
-    this.engine = this.pick();
+    this.aspect = this.normalizeAspect(Settings.get(this.live ? 'liveAspect' : 'aspect') || 'auto');
+    this.engine = this.pick(null, this._engineOverride);
     window.__engine = this.engine;
-    Diag.set(this.live ? 'Canli motor tercihi' : 'VOD motor tercihi', this.enginePreference(this.live));
+    Diag.set(this.live ? 'Canli motor tercihi' : 'VOD motor tercihi',
+      this._engineOverride ? ('Oturum: ' + this._engineOverride) : this.enginePreference(this.live));
     Diag.set('Cozulmus oynatici', this.engine);
+    if (this.engine === 'avplay') this.avCompatibilityDiagnostics('Oynatici aciliyor');
     this.playing = false;
 
     /* VOD her zaman hemen ve altyazisiz baslar. Kaynak incelemesi ancak
@@ -1090,7 +1450,7 @@ var Player = {
   _fail: function (msg, canFallback) {
     if (this._failed) return;
     /* AVPlay basarisiz olduysa bir kez HTML5 ile dene */
-    if (canFallback && this.engine === 'avplay' && this.enginePreference(this.live) === 'auto') {
+    if (canFallback && this.engine === 'avplay' && !this._engineOverride && this.enginePreference(this.live) === 'auto') {
       Diag.add('AVPlay basarisiz, HTML5 oynaticiya gecildi: ' + msg);
       try { webapis.avplay.stop(); } catch (e) { }
       try { webapis.avplay.close(); } catch (e) { }
@@ -1148,11 +1508,17 @@ var Player = {
         onbufferingcomplete: function () {
           if (token !== self._sessionId) return;
           self._bufferEnd(token, 'AVPlay');
+          /* Bazi Tizen surumleri tamponlamadan cikarken donanimsal goruntu
+             alanini varsayilana donduruyor. OTTplay'in yaptigi gibi ayni
+             oturumda yontemi ve alani yeniden uygula. */
+          self.applyAspect();
+          self._scheduleNativeSubtitleReselect('buffer');
         },
         onbufferingprogress: function () { },
         oncurrentplaytime: function (ms) {
           if (token !== self._sessionId) return;
           self._updateProgress((ms || 0) / 1000);
+          self._scheduleNativeSubtitleReselect('playtime');
         },
         onstreamcompleted: function () {
           if (token !== self._sessionId) return;
@@ -1362,6 +1728,7 @@ var Player = {
   stop: function (quiet) {
     this._sessionId++;
     if (this._viewportTimer) { clearTimeout(this._viewportTimer); this._viewportTimer = null; }
+    if (this._nativeReselectTimer) { clearTimeout(this._nativeReselectTimer); this._nativeReselectTimer = null; }
     if (typeof Tx3gSubtitles !== 'undefined' && Tx3gSubtitles.cancel) Tx3gSubtitles.cancel();
     this.playing = false;
     this._preparing = false;
