@@ -8,6 +8,9 @@ dist/
 .env
 .env.*
 !.env.example
+.dev.vars
+.wrangler/
+.wrangler-dry-run/
 .private/
 private-config.*
 secrets.*

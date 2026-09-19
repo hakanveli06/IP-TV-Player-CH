@@ -1,0 +1,1255 @@
+/* ---------------------------------------------------------------
+   IPTV - Samsung Tizen TV
+   1920x1080 sabit yerlesim, 3 metreden okunacak sekilde olceklendi.
+   Palet: derin murekkep mavisi taban + kehribar odak rengi.
+   --------------------------------------------------------------- */
+
+:root {
+  --bg:        #0A0F14;
+  --panel:     #121A22;
+  --panel-2:   #18222C;
+  --raised:    #1F2C38;
+  --line:      #253340;
+  --text:      #E8EEF3;
+  --muted:     #8899A6;
+  --dim:       #5C6B78;
+  --accent:    #F2B33D;
+  --accent-dk: #7A5A17;
+  --live:      #E2574C;
+  --ok:        #57C08A;
+
+  --rail-w:    132px;
+  --overscan:  40px;
+  --row-h:     76px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html, body {
+  width:1920px; height:1080px; overflow:hidden;
+  background:var(--bg); color:var(--text);
+  font-family:"SamsungOne","Samsung One",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:22px; line-height:1.35;
+  -webkit-user-select:none; user-select:none;
+  cursor:none;
+}
+/* AVPlay video is composited behind the web page. The root must not paint
+   over it; the body supplies the ordinary screen background when not playing. */
+html { background:transparent; }
+
+/* AVPlay yuzeyi ve HTML5 video: normalde gizli, oynatirken acilir */
+#avplayer, #html5player {
+  position:fixed; left:0; top:0; width:1920px; height:1080px;
+  background:#000; display:none; z-index:1;
+}
+#avplayer { background:transparent; }
+body.playing #avplayer.on,
+body.playing #html5player.on { display:block; }
+body.playing { background:transparent; }
+body.playing #app { display:none; }
+body.playing.live-preview #app { display:flex; }
+/* HTML5 video DOM katmaninda dogrudan pencereye tasinir. */
+body.live-preview #html5player.on { z-index:11; box-shadow:none; }
+/* 506x285, mevcut sag sutunun tam 16:9'a en yakin tam sayili alanidir. */
+.live-preview-slot { height:285px; width:100%; flex:0 0 285px; display:flex; align-items:center;
+  justify-content:center; background:var(--panel-2); color:var(--muted); font-size:19px;
+  line-height:1.45; text-align:center; padding:18px; overflow:hidden; }
+/* AVPlay nesnesi tam ekran kalir; donanimsal setDisplayRect bu seffaf 16:9
+   acikliga yoneltilir. Dev golge aciklik disindaki bilgi panelini boyar. */
+body.av-preview .live-info-panel { background:transparent; }
+body.av-preview .live-preview-slot {
+  position:relative; padding:0; background:transparent;
+  box-shadow:0 0 0 2000px var(--panel);
+}
+/* Yaygin golge yalnizca video deliginin disini boyar. EPG ve oynayan kanal
+   metinleri ayri opak katmanda onun ustunde kalir. */
+body.av-preview .preview-caption,
+body.av-preview .live-info-panel #lv-info {
+  position:relative; z-index:2; background:var(--panel);
+}
+.live-preview-slot b { color:var(--text); font-size:20px; }
+.live-preview-slot em { color:var(--accent); font-style:normal; }
+.preview-caption { font-size:19px; color:var(--text); margin:24px 0 0; }
+.preview-caption:empty { display:none; }
+.preview-label { color:var(--accent); font-size:18px; margin-bottom:6px; }
+.preview-name { font-size:25px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.preview-hint { font-size:17px; color:var(--muted); margin-top:12px; }
+.live-info-panel #lv-info { margin-top:30px; padding-top:22px; border-top:1px solid var(--line); }
+.live-info-panel #lv-info h2 { font-size:25px; margin:6px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.live-schedule { margin-top:12px; }
+.live-program + .live-program { margin-top:14px; }
+.live-program-time { font-size:17px; color:var(--muted); margin-bottom:3px; }
+.live-program-title { font-size:21px; line-height:1.3; max-height:55px; overflow:hidden;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+
+#app { position:fixed; left:0; top:0; right:0; bottom:0; display:flex; z-index:10; }
+
+/* ---------------- Sol serit ---------------- */
+
+#rail {
+  width:var(--rail-w); flex:0 0 var(--rail-w);
+  background:var(--panel); border-right:1px solid var(--line);
+  padding:var(--overscan) 0; display:flex; flex-direction:column;
+  transition:width .18s ease;
+}
+#rail.wide { width:320px; flex-basis:320px; }
+
+.rail-item {
+  display:flex; align-items:center;
+  height:72px; padding:0 30px; color:var(--muted); margin-bottom:6px;
+  white-space:nowrap; overflow:hidden; border-left:5px solid transparent;
+}
+.rail-item .ic { font-size:30px; width:34px; text-align:center; flex:0 0 34px; }
+.ui-icon {
+  width:1em; height:1em; display:inline-block; vertical-align:middle;
+  fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round;
+}
+.ui-icon .solid { fill:currentColor; stroke:none; }
+.rail-item .ui-icon { width:30px; height:30px; }
+.rail-item .tx { font-size:24px; opacity:0; transition:opacity .18s ease; margin-left:20px; }
+#rail.wide .rail-item .tx { opacity:1; }
+.rail-item.current { color:var(--text); border-left-color:var(--accent-dk); }
+.rail-item.focus {
+  background:var(--accent); color:#10161C; border-left-color:var(--accent);
+  font-weight:700;
+}
+#rail-spacer { flex:1; }
+.rail-account {
+  height:46px; padding:0 30px; display:flex; align-items:center; overflow:hidden;
+  color:var(--muted); white-space:nowrap;
+}
+.rail-account .ui-icon { width:28px; height:28px; flex:0 0 28px; }
+.rail-account span { margin-left:20px; opacity:0; overflow:hidden; text-overflow:ellipsis; font-size:18px; }
+#rail.wide .rail-account span { opacity:1; }
+.rail-version {
+  height:34px; padding:0 30px; display:flex; align-items:center;
+  color:var(--dim); font-size:17px; font-weight:700; letter-spacing:1px;
+  white-space:nowrap;
+}
+#rail.wide .rail-version { color:var(--muted); }
+
+/* ---------------- Ekran govdesi ---------------- */
+
+#screen { flex:1; position:relative; overflow:hidden; }
+.screen { position:absolute; left:0; top:0; right:0; bottom:0;
+          padding:var(--overscan) var(--overscan) 0 36px; }
+
+.page-title { font-size:38px; font-weight:700; margin-bottom:22px; letter-spacing:.2px; }
+.page-sub { color:var(--muted); font-size:20px; }
+.page-count { color:var(--muted); font-size:20px; font-weight:400; margin-left:12px; }
+
+/* Bolum ici anlik arama */
+.section-tools {
+  height:86px; display:flex; align-items:flex-start; position:relative;
+}
+.section-tools > * { margin-right:12px; }
+.section-search {
+  width:480px; height:62px; display:flex; align-items:center;
+  background:var(--panel); border:3px solid var(--line); border-radius:9px;
+  padding:0 20px;
+}
+.section-search.focus { border-color:var(--accent); background:#20303C; }
+.section-search .search-ic { color:var(--accent); font-size:28px; margin-right:14px; }
+.section-search .search-ic .ui-icon { width:28px; height:28px; }
+.section-search input {
+  flex:1; min-width:0; height:54px; border:0; outline:0; background:transparent;
+  color:var(--text); font-size:23px; font-family:inherit;
+}
+.section-search input::placeholder { color:var(--dim); }
+.search-state { position:absolute; left:18px; top:64px; height:20px; display:flex; align-items:center; color:var(--muted); font-size:16px; }
+.library-tool {
+  height:62px; min-width:205px; max-width:285px; display:flex; align-items:center;
+  padding:0 18px; border:3px solid var(--line); border-radius:9px;
+  background:var(--panel); color:var(--muted); font-size:18px; white-space:nowrap;
+}
+.library-tool b { color:var(--text); margin-left:7px; overflow:hidden; text-overflow:ellipsis; }
+.library-tool.focus { background:var(--accent); color:#392b0e; border-color:#fff0b9; }
+.library-tool.focus b { color:#10161c; }
+.vod-section-tools { align-items:flex-start; }
+.vod-section-tools > * { margin-right:0; }
+.vod-section-tools .section-search { width:390px; flex:0 0 390px; }
+.library-options { display:flex; align-items:flex-start; margin-left:26px; }
+.library-options .library-tool { margin:0 12px 0 0; }
+.library-options .library-tool:last-child { margin-right:0; }
+#g-view { min-width:205px; }
+#g-sort { min-width:330px; max-width:390px; }
+#g-filter { min-width:245px; }
+.section-search.editing { box-shadow:0 0 0 3px rgba(247,201,72,.22); }
+.library-nav-hint {
+  position:absolute; right:8px; top:65px; color:var(--dim); font-size:15px;
+  white-space:nowrap;
+}
+
+/* ---------------- Sutunlar ---------------- */
+
+.cols { display:flex; height:calc(1080px - var(--overscan) - 24px); }
+.col { display:flex; flex-direction:column; min-width:0; margin-right:26px; }
+.col:last-child { margin-right:0; }
+.col-cats { width:390px; flex:0 0 390px; }
+.col-list { flex:1; min-width:0; }
+.col-info { width:560px; flex:0 0 560px; }
+
+.col-head {
+  font-size:19px; color:var(--dim); margin-bottom:10px;
+  height:26px; display:flex; align-items:center; justify-content:space-between;
+}
+
+.listbox {
+  flex:1; background:var(--panel); border:1px solid var(--line);
+  border-radius:10px; overflow:hidden; position:relative;
+}
+.listbox .viewport { position:absolute; left:0; top:0; right:0; bottom:0; overflow:hidden; }
+.listbox .runner { position:absolute; left:0; right:0; top:0; }
+
+/* ---------------- Satirlar ---------------- */
+
+.row {
+  height:var(--row-h); display:flex; align-items:center;
+  padding:0 20px; border-bottom:1px solid rgba(37,51,64,.55);
+  overflow:hidden;
+}
+.row .num {
+  width:70px; flex:0 0 70px; text-align:right; color:var(--dim);
+  font-size:21px; margin-right:16px;
+}
+.row .logo {
+  width:56px; height:42px; flex:0 0 56px; border-radius:5px; margin-right:16px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--panel-2) center/contain no-repeat;
+}
+.logo-fallback { color:#9EB0BC; font-size:14px; font-weight:900; letter-spacing:.5px; }
+.row .body { flex:1; min-width:0; }
+.row .name {
+  font-size:24px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.row .meta {
+  font-size:17px; color:var(--muted); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; margin-top:2px;
+}
+.row .tag { font-size:26px; color:var(--accent); flex:0 0 auto; margin-left:16px; }
+
+.row.focus { background:var(--accent); color:#10161C; }
+.row.focus .num,
+.row.focus .meta { color:#3A2E10; }
+.row.focus .tag { color:#10161C; }
+.row.focus .logo-fallback { color:#10161C; }
+.row.current { background:var(--raised); }
+.row.current .name { color:var(--accent); }
+.row.current.focus { background:var(--accent); }
+.row.current.focus .name { color:#10161C; }
+
+.row .prog { height:4px; background:rgba(255,255,255,.14); border-radius:2px; margin-top:7px; }
+.row .prog i { display:block; height:100%; background:var(--accent); border-radius:2px; }
+.row.focus .prog { background:rgba(0,0,0,.22); }
+.row.focus .prog i { background:#10161C; }
+.live-next { color:#718493; }
+.live-row-progress { width:100%; height:3px; margin-top:3px; border-radius:2px; background:rgba(255,255,255,.12); overflow:hidden; }
+.live-row-progress i { display:block; height:100%; background:#57C08A; }
+.row.focus .live-row-progress { background:rgba(0,0,0,.2); }
+.row.focus .live-row-progress i { background:#253B2F; }
+
+/* ---------------- Sag bilgi paneli ---------------- */
+
+.info {
+  flex:1; background:var(--panel); border:1px solid var(--line);
+  border-radius:10px; padding:26px; overflow:hidden;
+}
+.info .poster {
+  width:100%; height:300px; border-radius:8px; margin-bottom:20px;
+  background:var(--panel-2) center/cover no-repeat;
+}
+.info h2 { font-size:30px; margin-bottom:6px; }
+.info .line { color:var(--muted); font-size:19px; margin-bottom:16px; }
+.info .desc {
+  font-size:19px; color:#C3D0DA; line-height:1.5;
+  max-height:230px; overflow:hidden;
+}
+.epg-now { border-top:1px solid var(--line); margin-top:18px; padding-top:18px; }
+.epg-now .t { font-size:23px; margin-bottom:6px; }
+.epg-now .s { color:var(--muted); font-size:18px; }
+.epg-next { margin-top:14px; color:var(--dim); font-size:18px; }
+
+/* ---------------- Ana sayfa ---------------- */
+
+.home-screen { padding:28px 38px 0 34px; background:linear-gradient(135deg,#08121b 0%,#0d1c28 58%,#111a24 100%); }
+.home-hero {
+  height:116px; display:flex; align-items:center; justify-content:space-between; padding:0 34px;
+  margin-bottom:8px; border:1px solid rgba(116,151,181,.28); border-radius:14px;
+  background:linear-gradient(105deg,rgba(31,56,76,.9),rgba(24,36,48,.55)); overflow:hidden;
+}
+.home-kicker { color:var(--accent); font-size:13px; font-weight:900; letter-spacing:4px; }
+.home-title { font-size:34px; font-weight:800; line-height:1.1; }
+.home-sub { color:#AAB8C2; font-size:16px; margin-top:5px; }
+.home-hero-mark { color:rgba(242,179,61,.18); transform:scale(4.4); margin-right:74px; }
+.home-rows { height:895px; overflow:hidden; scroll-behavior:smooth; }
+.home-section { overflow:hidden; padding-top:4px; }
+.home-section.portrait { height:370px; }
+.home-section.landscape { height:246px; }
+.home-section-title { height:42px; color:#E7EDF2; font-size:25px; font-weight:800; }
+.home-row { display:flex; overflow:hidden; }
+.home-section.portrait .home-row { height:320px; }
+.home-section.landscape .home-row { height:196px; }
+.home-card {
+  margin-right:20px; padding:6px; border:4px solid transparent; border-radius:12px;
+  background:rgba(18,29,39,.9); overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.22);
+}
+.home-card.portrait { width:206px; height:306px; flex:0 0 206px; }
+.home-card.landscape { width:310px; height:182px; flex:0 0 310px; }
+.home-card.focus { border-color:var(--accent); background:#253746; transform:scale(1.025); box-shadow:0 18px 44px rgba(0,0,0,.45); }
+.home-art { display:flex; align-items:center; justify-content:center; border-radius:8px; background:#1A2A38 center 22%/cover no-repeat; overflow:hidden; }
+.home-card.portrait .home-art { height:236px; }
+.home-card.landscape .home-art { height:116px; background-size:contain; background-position:center; }
+.home-art .ui-icon { width:46px; height:46px; color:#708493; }
+.home-card-title { margin-top:8px; overflow:hidden; color:#F0F4F7; font-size:20px; font-weight:700; line-height:1.15; white-space:nowrap; text-overflow:ellipsis; }
+.home-card-sub { margin-top:3px; color:#9EAFBB; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.home-card.empty { width:520px; flex-basis:520px; color:var(--muted); }
+.home-card.empty .home-art { display:none; }
+.home-card.empty .home-card-title { padding:27px 18px; color:var(--muted); white-space:normal; }
+.home-card.empty.focus .home-card-title { color:#fff; }
+
+/* ---------------- Izgara (film / dizi) ---------------- */
+
+.grid {
+  display:grid; grid-template-columns:repeat(5,224px);
+  column-gap:22px; row-gap:13px; align-content:start; justify-content:start;
+}
+/* 330px gorsel + 61px baslik + 13px satir araligi = Grid rowH 404px */
+.card { width:224px; height:391px; margin:0; }
+.card .art {
+  width:224px; height:330px; border-radius:9px;
+  background:var(--panel-2) center/cover no-repeat;
+  border:4px solid transparent; position:relative; overflow:hidden;
+}
+.card .art .ph {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--dim); font-size:17px; text-align:center; padding:14px;
+}
+.card .cap {
+  font-size:19px; margin-top:9px; height:52px; overflow:hidden; color:var(--muted);
+}
+.card.focus .art { border-color:var(--accent); }
+.card.focus .cap { color:var(--text); }
+.card .bar { position:absolute; left:0; right:0; bottom:0; height:6px; background:rgba(0,0,0,.55); }
+.card .bar i { display:block; height:100%; background:var(--accent); }
+.vod-rating-badge {
+  position:absolute; right:7px; top:7px; z-index:2; min-width:58px; height:31px;
+  display:flex; align-items:center; justify-content:center; padding:0 9px;
+  border-radius:16px; background:rgba(5,12,18,.86); color:#ffd866;
+  border:1px solid rgba(255,255,255,.28); font-size:16px; font-weight:700;
+  box-shadow:0 2px 8px rgba(0,0,0,.38);
+}
+.vod-category-badge {
+  position:absolute; left:7px; bottom:12px; z-index:2; max-width:198px; height:29px;
+  display:flex; align-items:center; padding:0 10px; overflow:hidden;
+  border-radius:15px; background:rgba(5,12,18,.86); color:#E7EDF2;
+  border:1px solid rgba(255,255,255,.25); font-size:13px; font-weight:700;
+  white-space:nowrap; text-overflow:ellipsis; box-shadow:0 2px 8px rgba(0,0,0,.38);
+}
+.vod-new-badge {
+  position:absolute; left:7px; top:7px; z-index:3; height:31px; display:flex;
+  align-items:center; padding:0 10px; border-radius:7px; color:#fff; background:#d94a43;
+  border:1px solid rgba(255,255,255,.38); font-size:14px; font-weight:900; letter-spacing:1px;
+}
+.vod-fav { color:var(--accent); margin-left:7px; }
+.vod-watched { display:block; color:#7fd4a2; font-size:15px; margin-top:2px; }
+.card.focus .vod-fav, .card.focus .vod-watched { color:var(--text); }
+.grid.vod-list { display:block; }
+.grid.vod-list .card {
+  width:100%; height:106px; display:flex; align-items:center; padding:8px 18px;
+  border:3px solid transparent; border-radius:10px; background:var(--panel); margin-bottom:10px;
+}
+.vod-poster-img { position:absolute; left:0; top:0; right:0; bottom:0; width:100%; height:100%; object-fit:cover; }
+.poster-failed { background:linear-gradient(145deg,#203241,#101820); }
+.grid.vod-list .card.focus { border-color:var(--accent); background:#20303c; }
+.vod-list-art {
+  width:62px; height:90px; flex:0 0 62px; margin-right:22px; position:relative; overflow:hidden;
+  border-radius:6px; background:var(--panel-2) center/cover no-repeat;
+}
+.vod-list-art .ph { display:flex; width:100%; height:100%; align-items:center; justify-content:center; padding:5px; font-size:10px; color:var(--dim); text-align:center; }
+.vod-list-copy { flex:1; min-width:0; }
+.vod-list-title { font-size:25px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vod-title-scroll { display:inline-block; white-space:nowrap; will-change:transform; }
+.card.focus .vod-title-scroll.long { animation:vod-title-once 5.2s 1.15s ease-in-out 1 forwards; }
+@keyframes vod-title-once { 0%,12% { transform:translateX(0); } 88%,100% { transform:translateX(-28%); } }
+.vod-list-meta { margin-top:7px; color:var(--muted); font-size:18px; }
+.vod-list-category {
+  margin-top:4px; color:#D6B955; font-size:15px; font-weight:650;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.grid.vod-list .card.focus .vod-list-category { color:#FFE59A; }
+.grid.vod-list .vod-watched { flex:0 0 auto; margin-left:18px; font-size:18px; }
+.episode-watched { color:#7fd4a2; margin-right:18px; }
+.episode-source { color:var(--accent); }
+.col-list { position:relative; }
+.vod-focus-preview {
+  position:absolute; z-index:8; right:18px; top:3px; max-width:620px; height:54px;
+  display:none; align-items:center; padding:0 18px; border-radius:8px;
+  background:rgba(8,16,23,.94); border:1px solid var(--line); box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+.vod-focus-preview.on { display:flex; }
+.vod-focus-preview b { max-width:400px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:18px; }
+.vod-focus-preview span { margin-left:18px; color:var(--muted); font-size:15px; white-space:nowrap; }
+.vod-position {
+  display:none; position:absolute; z-index:14; right:4px; top:40px; bottom:8px; width:8px;
+  border-radius:5px; background:rgba(255,255,255,.09); pointer-events:none;
+}
+.vod-position.visible { display:block; }
+.vod-position > i {
+  position:absolute; left:0; top:0; width:8px; min-height:48px; border-radius:5px;
+  background:rgba(242,179,61,.58); transform:translateY(0); transition:transform .12s ease-out,background .16s linear;
+}
+.vod-position.active > i { background:var(--accent); }
+.vod-position > span {
+  display:none; position:absolute; right:18px; width:190px; height:48px;
+  align-items:center; justify-content:center; border-radius:8px;
+  background:rgba(6,13,19,.94); border:1px solid rgba(255,255,255,.2);
+  color:#F4F7F9; font-size:17px; font-weight:750; box-shadow:0 8px 24px rgba(0,0,0,.38);
+}
+.vod-position.active > span { display:flex; }
+.search-all-action {
+  position:absolute; z-index:12; left:50%; top:46%; width:520px; min-height:128px;
+  display:none; padding:24px 30px; transform:translate(-50%,-50%);
+  border:3px solid rgba(119,143,160,.42); border-radius:14px;
+  background:rgba(10,20,28,.94); color:var(--text); text-align:center;
+  box-shadow:0 18px 54px rgba(0,0,0,.5);
+}
+.search-all-action.on { display:block; }
+.search-all-action b { display:block; font-size:23px; }
+.search-all-action span { display:inline-block; margin-top:14px; padding:10px 22px; border-radius:8px; background:var(--raised); color:var(--accent); font-size:19px; font-weight:750; }
+.search-all-action.on.focus { border-color:var(--accent); background:#172936; }
+.search-all-action.focus span { background:var(--accent); color:#10161C; }
+
+/* ---------------- Sinematik film/dizi detayi ---------------- */
+
+.detail-screen { padding:0; background:linear-gradient(135deg,#101d27 0%,#071018 58%,#050b10 100%); }
+.detail-backdrop {
+  position:absolute; left:0; top:0; right:0; bottom:0; overflow:hidden;
+  background:linear-gradient(135deg,#1B3242,#071018 72%); opacity:.22;
+  transform:scale(1.005); transition:opacity .28s ease;
+}
+.detail-backdrop.loaded { opacity:.92; }
+.detail-backdrop.fallback { opacity:1; }
+.detail-backdrop-image { width:100%; height:100%; object-fit:cover; object-position:72% 18%; }
+.detail-loading-copy { position:absolute; left:48px; top:88px; width:900px; text-shadow:0 2px 10px rgba(0,0,0,.75); }
+.detail-loading-line { margin-top:24px; color:#C4D0D8; font-size:22px; }
+.detail-gradient {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(5,11,17,.99) 0%,rgba(5,11,17,.93) 27%,rgba(5,11,17,.6) 46%,rgba(5,11,17,.14) 73%,rgba(5,11,17,.12) 100%),
+             linear-gradient(0deg,#071018 0%,rgba(7,16,24,.96) 18%,rgba(7,16,24,.68) 36%,rgba(7,16,24,.1) 69%);
+}
+.detail-content { position:absolute; left:0; top:0; right:0; bottom:0; padding:42px 46px 0 42px; display:flex; flex-direction:column; }
+.detail-hero { height:420px; flex:0 0 420px; width:980px; text-shadow:0 2px 10px rgba(0,0,0,.72); }
+.detail-type { color:#D6E0E8; font-size:17px; font-weight:800; letter-spacing:4px; }
+.detail-title { max-width:940px; margin-top:7px; font-size:52px; line-height:1.08; font-weight:800; }
+.detail-meta { margin-top:13px; color:#D7E0E6; font-size:20px; font-weight:650; }
+.detail-categories { display:flex; align-items:center; flex-wrap:wrap; margin-top:10px; max-width:900px; }
+.detail-categories > span:first-child { margin-right:10px; color:#AEBCC7; font-size:14px; font-weight:700; }
+.detail-category {
+  display:inline-flex; align-items:center; height:27px; margin:0 7px 5px 0; padding:0 10px;
+  border:1px solid rgba(214,224,232,.35); border-radius:14px; color:#E8EEF2;
+  background:rgba(8,16,23,.48); font-size:13px; font-weight:700;
+}
+.detail-description {
+  width:900px; max-height:96px; margin-top:16px; padding:8px 10px; overflow:hidden;
+  color:#E2E9EE; font-size:22px; line-height:1.45; border:2px solid transparent; border-radius:8px;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+}
+.detail-description.focus { border-color:var(--accent); background:rgba(9,17,24,.72); }
+.detail-description.expanded {
+  position:absolute; z-index:5; left:42px; top:150px; width:1160px; max-height:300px;
+  display:block; padding:20px 24px; overflow:hidden; background:rgba(7,14,20,.97);
+  border-color:var(--accent); box-shadow:0 18px 60px rgba(0,0,0,.65);
+}
+.detail-summary-hint { width:900px; color:#B8C4CC; font-size:14px; padding-left:10px; }
+.detail-actions { margin-top:14px; flex-wrap:nowrap; }
+.detail-actions .btn { height:58px; padding:0 24px; font-size:20px; }
+.detail-body { flex:1; min-height:0; display:flex; padding-top:8px; }
+.detail-seasons { width:250px; flex:0 0 250px; margin-right:22px; background:transparent; }
+.detail-episodes { flex:1; min-width:0; background:transparent; }
+.detail-seasons .col-head, .detail-episodes .col-head { color:#D8E2E9; font-weight:750; text-shadow:0 2px 8px rgba(0,0,0,.8); }
+.detail-seasons .listbox, .detail-episodes .listbox { background:transparent; border:0; border-radius:0; }
+.detail-seasons .row {
+  margin:0 8px 0 0; padding:0 18px; border:3px solid transparent; border-bottom-color:transparent;
+  border-radius:12px; background:rgba(12,24,33,.48); text-shadow:0 2px 8px rgba(0,0,0,.72);
+}
+.detail-seasons .row.current { background:rgba(49,72,88,.68); }
+.detail-seasons .row.focus { border-color:rgba(255,255,255,.88); background:rgba(242,179,61,.94); color:#10161C; text-shadow:none; }
+.detail-seasons .row.focus .meta { color:#4A3915; }
+.detail-episodes .row {
+  padding:8px 12px; border:2px solid transparent; border-bottom:1px solid rgba(205,221,232,.16);
+  background:linear-gradient(90deg,rgba(7,16,24,.52) 0%,rgba(7,16,24,.29) 64%,rgba(7,16,24,0) 100%);
+}
+.detail-episodes .row.focus {
+  background:linear-gradient(90deg,rgba(35,55,69,.94) 0%,rgba(26,45,59,.76) 60%,rgba(13,27,37,.36) 100%);
+  border-color:rgba(242,179,61,.78); color:#fff; box-shadow:inset 6px 0 0 var(--accent);
+}
+.episode-thumb {
+  width:218px; height:122px; flex:0 0 218px; position:relative; margin-right:20px;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  border-radius:8px; background:#1A2A38; color:var(--muted); font-size:34px;
+}
+.episode-thumb img { width:100%; height:100%; object-fit:cover; }
+.episode-thumb b {
+  position:absolute; left:7px; top:7px; min-width:28px; height:28px; padding:3px 7px;
+  border-radius:5px; background:rgba(5,11,17,.82); color:#fff; font-size:15px; text-align:center;
+}
+.episode-copy { min-width:0; padding-top:3px; }
+.episode-copy .name { font-size:23px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.episode-meta { height:24px; margin-top:4px; color:#B9C6CF; font-size:15px; }
+.episode-overview {
+  height:43px; margin-top:4px; overflow:hidden; color:#AEBCC7; font-size:15px; line-height:1.4;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2;
+}
+.episode-new { display:inline-block; margin-left:10px; padding:3px 7px; border-radius:5px; background:#d94a43; color:#fff; font-size:12px; vertical-align:middle; }
+.detail-episodes .row.focus .episode-meta, .detail-episodes .row.focus .episode-overview { color:#E2E9EE; }
+.detail-episodes .row.focus .episode-watched { color:#9DE7BB; }
+.detail-episodes .row.focus .episode-source { color:#FFD77A; }
+
+/* ---------------- Dugmeler ---------------- */
+
+.btn {
+  display:inline-flex; align-items:center; height:64px; padding:0 34px;
+  border-radius:8px; background:var(--raised); color:var(--text);
+  font-size:23px; border:3px solid transparent; white-space:nowrap;
+  margin:0 16px 16px 0;
+}
+.btn.focus { background:var(--accent); color:#10161C; font-weight:700; }
+.btn.primary { background:var(--accent-dk); }
+.btn.primary.focus { background:var(--accent); color:#10161C; font-weight:700; }
+.btn.disabled { color:var(--dim); background:var(--panel); }
+.btn.disabled.focus { color:#10161C; background:var(--accent); }
+.btn.danger { background:rgba(226,87,76,.16); color:#F3B3AE; }
+.btn.danger.focus { background:var(--live); color:#fff; }
+.btnrow { display:flex; flex-wrap:wrap; }
+
+/* ---------------- Son izlenenler / hakkinda ---------------- */
+
+.recent-help {
+  border-top:1px solid var(--line); margin-top:24px; padding-top:20px;
+  color:var(--muted); font-size:18px;
+}
+.recent-main { display:flex; align-items:center; flex:1; min-width:0; height:100%; }
+.recent-remove {
+  width:54px; height:54px; flex:0 0 54px; display:flex; align-items:center; justify-content:center;
+  margin-left:16px; border:3px solid transparent; border-radius:9px; color:#F3B3AE;
+  background:rgba(226,87,76,.14); font-size:33px; font-weight:500;
+}
+.recent-remove.focus { border-color:#fff; background:var(--live); color:#fff; box-shadow:0 0 0 4px rgba(226,87,76,.2); }
+.about-screen { padding-right:80px; }
+.about-card {
+  width:1120px; min-height:650px; margin:30px auto 0; padding:54px 66px;
+  display:flex; align-items:center;
+  background:var(--panel); border:1px solid var(--line); border-radius:18px;
+  box-shadow:0 26px 80px rgba(0,0,0,.28);
+}
+.about-logo {
+  width:390px; height:390px; flex:0 0 390px; object-fit:cover;
+  border-radius:78px; box-shadow:0 22px 55px rgba(0,0,0,.45); margin-right:66px;
+}
+.about-copy { flex:1; min-width:0; }
+.about-brand { color:var(--accent); font-size:68px; line-height:1; font-weight:800; letter-spacing:2px; }
+.about-product { font-size:34px; font-weight:700; margin:15px 0 42px; }
+.about-credit { color:#C3D0DA; font-size:25px; line-height:1.5; margin-bottom:16px; }
+.about-mail { color:var(--accent); font-size:25px; margin-bottom:30px; }
+.about-version { color:var(--muted); font-size:18px; margin-bottom:30px; letter-spacing:1px; }
+.tmdb-attribution {
+  display:flex; align-items:center; max-width:590px; margin:-12px 0 30px;
+  color:var(--muted); font-size:14px; line-height:1.35;
+}
+.tmdb-wordmark {
+  width:137px; height:auto; flex:0 0 137px; margin-right:14px;
+}
+
+/* ---------------- Giris ekrani ---------------- */
+
+#login-wrap {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  display:flex; align-items:center; justify-content:center;
+}
+.login {
+  width:800px; background:var(--panel); border:1px solid var(--line);
+  border-radius:14px; padding:30px 50px 26px;
+}
+.login .brand { font-size:40px; font-weight:700; letter-spacing:1px; }
+.login .brand b { color:var(--accent); }
+.login .hint { color:var(--muted); font-size:18px; margin:6px 0 18px; }
+.field { margin-bottom:13px; }
+.field label { display:block; font-size:18px; color:var(--muted); margin-bottom:5px; }
+.field input {
+  width:100%; height:58px; padding:0 20px; font-size:23px;
+  background:var(--panel-2); color:var(--text);
+  border:3px solid var(--line); border-radius:8px; outline:none;
+  font-family:inherit;
+}
+.field input.focus { border-color:var(--accent); background:#20303C; }
+.err { color:var(--live); font-size:19px; min-height:24px; margin-bottom:5px; }
+.password-toggle {
+  display:flex; width:290px; align-items:center; justify-content:flex-start;
+  height:52px; font-size:20px; margin-bottom:5px;
+}
+.login .btnrow .btn { height:58px; margin-bottom:0; }
+.password-toggle .ui-icon { width:26px; height:26px; margin-right:13px; }
+
+/* ---------------- Coklu hesap yonetimi ---------------- */
+
+.account-screen { padding-right:62px; }
+.account-error {
+  margin:-8px 0 18px; padding:13px 18px; color:#F3B3AE;
+  background:rgba(226,87,76,.14); border:1px solid rgba(226,87,76,.32); border-radius:8px;
+}
+.account-layout { display:flex; height:820px; }
+.account-list { width:940px; flex:0 0 940px; margin-right:34px; }
+.account-side { flex:1; min-width:0; }
+.account-info { min-height:300px; margin-bottom:24px; }
+.account-actions { display:flex; flex-direction:column; align-items:flex-start; }
+.account-actions .btn { width:620px; }
+.account-avatar {
+  width:62px; height:62px; flex:0 0 62px; margin-right:18px; border-radius:31px;
+  display:flex; align-items:center; justify-content:center; background:var(--panel-2); color:var(--accent);
+}
+.account-avatar .ui-icon { width:35px; height:35px; }
+.account-active {
+  padding:7px 11px; border-radius:5px; background:rgba(87,192,138,.16);
+  color:var(--ok); font-size:15px; font-weight:800; letter-spacing:1px;
+}
+.row.focus .account-avatar { color:#10161C; background:rgba(16,22,28,.12); }
+.row.focus .account-active { color:#103B28; background:rgba(16,59,40,.14); }
+
+/* ---------------- Ayarlar yardimi ve yonetim ekranlari ---------------- */
+
+.settings-heading { display:flex; align-items:center; justify-content:space-between; }
+.settings-heading .page-title { margin-bottom:16px; }
+.settings-search {
+  width:560px; height:58px; display:flex; align-items:center; padding:0 18px;
+  border:2px solid var(--line); border-radius:10px; background:var(--panel);
+}
+.settings-search.focus { border-color:var(--accent); box-shadow:0 0 0 4px rgba(244,199,79,.14); }
+.settings-search input { flex:1; min-width:0; color:var(--text); background:transparent; border:0; outline:0; font-size:22px; }
+.settings-search-state { height:34px; color:var(--muted); font-size:16px; text-align:right; }
+.settings-layout { display:flex; height:850px; }
+.settings-categories { width:330px; flex:0 0 330px; overflow:hidden; padding-right:8px; margin-right:24px; }
+.settings-categories .btnrow, .settings-list .btnrow { flex-direction:column; align-items:flex-start; }
+.settings-categories .btn { width:310px; height:62px; margin-bottom:10px; padding:0 18px; font-size:19px; text-align:left; }
+.settings-list { width:650px; flex:0 0 650px; overflow:hidden; padding-right:8px; margin-right:24px; }
+.settings-list .btnrow { flex-direction:column; align-items:flex-start; }
+.settings-list .btn { width:628px; min-height:62px; height:62px; margin-bottom:10px; padding:0 18px; font-size:19px; text-align:left; }
+.settings-help { min-width:0; height:690px; padding:34px; }
+.settings-help-kicker { color:var(--accent); font-size:18px; font-weight:700; margin-bottom:12px; }
+.settings-help h2 { font-size:30px; margin-bottom:22px; }
+.settings-help-copy { color:#C3D0DA; font-size:20px; line-height:1.5; }
+.settings-recommended { margin-top:30px; padding:20px; border-radius:8px; background:var(--panel-2); color:var(--text); font-size:20px; }
+.settings-recommended b { color:var(--accent); }
+.settings-choice-note { margin-top:24px; color:var(--accent); font-size:17px; }
+.settings-empty { width:100%; padding:60px 18px; color:var(--muted); font-size:20px; text-align:center; }
+.settings-help-footer { border-top:1px solid var(--line); margin-top:34px; padding-top:20px; color:var(--muted); font-size:17px; }
+
+.tmdb-settings-layout { display:flex; height:830px; }
+.tmdb-settings-form { width:880px; flex:0 0 880px; margin-right:38px; padding:28px 34px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.tmdb-settings-status { margin-bottom:26px; padding:15px 18px; color:#F3C4A8; background:rgba(226,136,76,.13); border:1px solid rgba(226,136,76,.35); border-radius:8px; font-size:21px; font-weight:700; }
+.tmdb-settings-status.ready { color:#AEE9C8; background:rgba(87,192,138,.13); border-color:rgba(87,192,138,.35); }
+.tmdb-settings-form .field { margin-bottom:16px; }
+.tmdb-settings-form .field input { font-size:20px; }
+.tmdb-settings-actions { display:flex; flex-direction:column; align-items:flex-start; margin-top:16px; }
+.tmdb-settings-actions .btn { width:520px; }
+.tmdb-settings-help { flex:1; min-width:0; height:830px; padding:28px 34px; }
+.tmdb-settings-help h2 { margin-bottom:16px; font-size:28px; }
+.tmdb-settings-copy { color:#C3D0DA; font-size:18px; line-height:1.42; }
+.tmdb-settings-copy b { color:var(--text); }
+.tmdb-settings-url { display:inline-block; padding:12px 15px; color:var(--accent); background:var(--panel-2); border-radius:7px; font-size:19px; }
+.language-screen { display:flex; align-items:center; justify-content:center; }
+.language-card { width:980px; padding:54px 64px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
+.language-card .brand { margin-bottom:26px; }
+.language-list { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:28px 0 20px; }
+.language-choice { margin:0; text-align:left; }
+.language-hint { color:var(--muted); font-size:19px; }
+.login-title { margin:6px 0 16px; font-size:24px; color:var(--text); }
+.region-layout { display:grid; grid-template-columns:650px 1fr; gap:28px; min-height:760px; margin-top:24px; }
+.region-list { display:grid; grid-template-columns:1fr 1fr; gap:12px; align-content:start; }
+.region-list .btn { margin:0; }
+.region-help { padding:34px; }
+.tmdb-region-button { text-align:left; }
+.tmdb-how-title { margin-top:18px; }
+.tmdb-benefits { line-height:1.55; }
+.tmdb-settings-help .settings-recommended { margin-top:18px; padding:16px; font-size:18px; }
+
+.category-settings-top { display:flex; align-items:center; margin-bottom:18px; }
+.category-settings-top .btn { margin-bottom:0; }
+.category-settings-list, .favorite-order-list { width:1260px; height:820px; }
+.visibility-mark { width:52px; flex:0 0 52px; color:var(--ok); font-size:28px; text-align:center; }
+.visibility-state { width:180px; flex:0 0 180px; color:var(--muted); text-align:right; font-size:18px; }
+.row.focus .visibility-mark, .row.focus .visibility-state { color:#10161C; }
+.favorite-order-help { margin:-8px 0 20px; }
+.favorite-order-num { width:70px; flex:0 0 70px; color:var(--muted); text-align:center; }
+.favorite-moving { color:var(--accent); font-size:18px; font-weight:700; }
+.row.focus .favorite-order-num, .row.focus .favorite-moving { color:#10161C; }
+
+.remote-guide-layout { display:flex; height:820px; }
+.remote-guide-menu { width:600px; flex:0 0 600px; display:flex; flex-direction:column; margin-right:36px; }
+.remote-guide-menu .btn { width:560px; }
+.remote-guide-info { max-width:860px; height:620px; padding:42px; }
+.remote-guide-copy { color:#C3D0DA; font-size:23px; line-height:1.75; }
+
+/* ---------------- Gunluk EPG ve son kanallar ---------------- */
+
+.daily-epg {
+  position:absolute; left:430px; top:70px; width:1060px; height:940px;
+  padding:34px 42px; background:rgba(10,15,20,.97); border:2px solid var(--line);
+  border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.6);
+}
+.daily-title { color:var(--accent); font-size:27px; font-weight:700; }
+.daily-channel { font-size:36px; font-weight:700; margin:8px 0 24px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.daily-loading, .daily-empty { height:680px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:23px; }
+.daily-list { height:720px; overflow:hidden; }
+.daily-row { display:flex; align-items:center; height:68px; padding:0 20px; border-bottom:1px solid var(--line); border-radius:6px; }
+.daily-row.selected { color:#10161C; background:var(--accent); }
+.daily-row.current:not(.selected) { background:rgba(215,180,92,.13); }
+.daily-time { width:210px; flex:0 0 210px; color:var(--muted); font-size:19px; }
+.daily-row.selected .daily-time { color:#3A2E10; }
+.daily-program { font-size:23px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.daily-now { display:inline-block; margin-left:14px; padding:3px 8px; border-radius:5px; background:var(--accent); color:#15120a; font-size:14px; font-weight:800; vertical-align:3px; }
+.daily-help { color:var(--muted); font-size:18px; margin-top:17px; text-align:center; }
+
+.recent-channels {
+  position:absolute; right:70px; top:105px; width:720px; min-height:650px;
+  padding:30px 34px; background:rgba(10,15,20,.96); border:2px solid var(--line);
+  border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.65);
+}
+.recent-channels-title { color:var(--accent); font-size:30px; font-weight:700; }
+.recent-channels-sub { color:var(--muted); font-size:18px; margin:4px 0 20px; }
+.recent-channel-row { display:flex; height:65px; align-items:center; padding:0 16px; border-bottom:1px solid var(--line); border-radius:6px; }
+.recent-channel-row.selected { background:var(--accent); color:#10161C; }
+.recent-channel-row.playing:not(.selected) { background:var(--raised); }
+.recent-channel-num { width:58px; flex:0 0 58px; color:var(--muted); text-align:center; }
+.recent-channel-row.selected .recent-channel-num { color:#3A2E10; }
+.recent-channel-name { flex:1; min-width:0; font-size:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.recent-channel-state { width:155px; flex:0 0 155px; text-align:right; color:var(--ok); font-size:15px; }
+.recent-channel-row.selected .recent-channel-state { color:#103B28; }
+.recent-channels-help { color:var(--muted); font-size:17px; margin-top:20px; text-align:center; }
+
+/* ---------------- Oynatici katmani ---------------- */
+
+#overlay { position:fixed; left:0; top:0; right:0; bottom:0; z-index:60; display:none; }
+#overlay.on { display:block; }
+#overlay.player-info-on { background:linear-gradient(90deg,rgba(3,7,10,.18),rgba(3,7,10,.5) 44%,rgba(3,7,10,.82)); }
+
+.choice-shade {
+  position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(3,7,10,.78);
+}
+.choice-panel {
+  width:720px; max-height:860px; padding:34px 38px 28px; color:var(--text);
+  background:rgba(13,22,32,.99); border:2px solid rgba(119,151,180,.75);
+  border-radius:20px; box-shadow:0 28px 90px rgba(0,0,0,.72);
+}
+.choice-title { color:var(--accent); font-size:34px; font-weight:800; margin-bottom:22px; }
+.choice-list { max-height:680px; overflow:hidden; }
+.choice-row {
+  height:68px; display:flex; align-items:center; justify-content:space-between;
+  padding:0 22px; margin-bottom:8px; font-size:23px; border:2px solid transparent;
+  border-radius:10px; background:var(--panel-2);
+}
+.choice-row b { color:var(--ok); font-size:16px; font-weight:700; }
+.choice-row.focus { color:#10161C; background:var(--accent); border-color:#FFF1B5; }
+.choice-row.focus b { color:#21402C; }
+.choice-help { color:var(--muted); font-size:17px; margin-top:20px; text-align:center; }
+
+/* TMDb bilgisi detay sayfasini sikistirmayan, kumandayla yonetilen modal. */
+.tmdb-modal {
+  position:absolute; left:190px; top:70px; width:1540px; min-height:860px;
+  padding:42px 54px 32px; color:var(--text); background:rgba(13,22,32,.985);
+  border:2px solid rgba(119,151,180,.75); border-radius:22px;
+  box-shadow:0 32px 110px rgba(0,0,0,.75);
+}
+.tmdb-player-modal {
+  left:auto; right:0; top:0; bottom:0; width:1000px; min-height:0; height:1080px;
+  padding:42px 50px 30px; border-width:0 0 0 2px; border-radius:0;
+  background:rgba(10,17,24,.975); box-shadow:-28px 0 95px rgba(0,0,0,.65);
+}
+.tmdb-player-modal .tmdb-content { height:890px; }
+.tmdb-player-modal .tmdb-layout { min-height:880px; }
+.tmdb-player-modal .tmdb-poster { width:220px; height:330px; flex-basis:220px; margin-right:28px; }
+.tmdb-player-modal .tmdb-title { font-size:34px; }
+.tmdb-player-modal .tmdb-overview { font-size:19px; }
+.tmdb-player-modal .tmdb-rating { width:205px; }
+.tmdb-player-modal .tmdb-person { width:122px; flex-basis:122px; }
+.tmdb-player-modal .tmdb-person-photo { width:102px; height:122px; }
+.tmdb-player-modal .tmdb-scrollbar { top:108px; height:850px; }
+.tmdb-head { color:var(--accent); font-size:36px; line-height:1.1; font-weight:800; margin-bottom:28px; }
+.tmdb-content { height:710px; overflow:hidden; padding-right:20px; }
+.tmdb-layout { display:flex; align-items:flex-start; min-height:710px; padding-bottom:18px; }
+.tmdb-poster { width:330px; height:495px; flex:0 0 330px; object-fit:cover; border-radius:14px; margin-right:42px; }
+.tmdb-copy { flex:1; min-width:0; }
+.tmdb-title { font-size:42px; font-weight:800; line-height:1.15; }
+.tmdb-original { color:var(--muted); font-size:22px; margin-top:7px; }
+.tmdb-meta { color:#C3D0DA; font-size:21px; margin-top:18px; }
+.tmdb-ratings { display:flex; margin:20px 0 17px; }
+.tmdb-rating {
+  width:245px; height:90px; display:flex; flex-direction:column; justify-content:center;
+  padding:0 22px; margin-right:16px; border-radius:12px; background:rgba(1,180,228,.14);
+  border:1px solid rgba(1,180,228,.48);
+}
+.tmdb-rating.secondary { background:var(--panel-2); border-color:var(--line); }
+.tmdb-rating b { color:#8BD8A5; font-size:31px; line-height:1; }
+.tmdb-rating span { color:#C3D0DA; font-size:16px; margin-top:8px; }
+.tmdb-facts { display:grid; grid-template-columns:1fr 1fr; column-gap:30px; row-gap:5px; margin:0 0 9px; }
+.tmdb-fact { color:#C3D0DA; font-size:18px; line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tmdb-fact strong { color:var(--text); }
+.tmdb-section-title { color:var(--text); font-size:21px; font-weight:800; margin-bottom:9px; }
+.tmdb-cast-title { margin-top:16px; }
+.tmdb-cast-cards { display:flex; min-height:218px; margin-bottom:17px; overflow:hidden; }
+.tmdb-person { width:145px; flex:0 0 145px; margin-right:16px; }
+.tmdb-person-photo {
+  position:relative; width:122px; height:146px; margin:0 auto; display:flex; align-items:center; justify-content:center;
+  color:#718395; background:#1A2A38; border:1px solid var(--line); border-radius:9px; overflow:hidden;
+}
+.tmdb-person-photo .ui-icon { width:42px; height:42px; }
+.tmdb-person-photo img { position:absolute; left:0; top:0; right:0; bottom:0; width:100%; height:100%; object-fit:cover; background:#1A2A38; }
+.tmdb-person-name { min-height:21px; margin-top:7px; overflow:hidden; color:#F0F4F7; font-size:16px; line-height:1.25; text-align:center; }
+.tmdb-person-character { height:36px; margin-top:3px; overflow:hidden; color:var(--muted); font-size:13px; line-height:1.25; text-align:center; }
+.tmdb-platforms { padding:14px 18px 11px; border:1px solid var(--line); border-radius:12px; background:rgba(28,43,57,.7); }
+.tmdb-platform-row { display:flex; align-items:center; min-height:58px; color:#D5DEE5; font-size:17px; overflow:hidden; }
+.tmdb-platform-row strong { width:112px; flex:0 0 112px; color:var(--text); }
+.tmdb-platform-row > span { display:flex; align-items:center; min-width:0; overflow:hidden; }
+.tmdb-provider { display:inline-flex; align-items:center; margin-right:20px; white-space:nowrap; }
+.tmdb-provider img { width:48px; height:48px; object-fit:cover; border-radius:9px; margin-right:8px; }
+.tmdb-platform-row em { color:var(--muted); font-style:normal; }
+.tmdb-platform-empty { color:var(--muted); font-size:18px; line-height:1.4; }
+.tmdb-justwatch { color:var(--muted); font-size:12px; margin-top:4px; }
+.tmdb-overview { color:#E8EEF2; font-size:23px; line-height:1.52; margin-top:20px; white-space:normal; }
+.tmdb-source { color:var(--muted); font-size:15px; margin-top:10px; }
+.tmdb-scrollbar { display:none; position:absolute; right:30px; top:115px; width:7px; height:700px; border-radius:4px; background:rgba(255,255,255,.1); }
+.tmdb-scrollbar.visible { display:block; }
+.tmdb-scrollbar i { position:absolute; left:0; top:0; width:7px; border-radius:4px; background:var(--accent); }
+.tmdb-footer { position:absolute; left:54px; right:54px; bottom:26px; color:var(--muted); font-size:17px; border-top:1px solid var(--line); padding-top:17px; }
+.tmdb-loading, .tmdb-empty { height:650px; display:flex; align-items:center; justify-content:center; color:#C3D0DA; font-size:25px; }
+.tmdb-loading i {
+  width:38px; height:38px; margin-right:20px; border:5px solid rgba(255,255,255,.18);
+  border-top-color:var(--accent); border-radius:50%; animation:tmdb-spin 1s linear infinite;
+}
+@keyframes tmdb-spin { to { transform:rotate(360deg); } }
+.tmdb-hint { color:var(--muted); font-size:20px; margin:-14px 0 20px; }
+.tmdb-candidate {
+  height:205px; display:flex; padding:13px 18px; margin-bottom:12px; overflow:hidden;
+  border:2px solid transparent; border-radius:12px; background:var(--panel-2);
+}
+.tmdb-candidate.focus { color:#10161C; background:var(--accent); border-color:#FFF1B5; }
+.tmdb-candidate img, .tmdb-poster-empty { width:120px; height:180px; flex:0 0 120px; object-fit:cover; border-radius:8px; margin-right:24px; background:#1A2A38; }
+.tmdb-candidate-title { font-size:27px; font-weight:800; margin-top:8px; }
+.tmdb-candidate-meta { color:var(--muted); font-size:18px; margin-top:5px; }
+.tmdb-candidate-overview { max-height:78px; overflow:hidden; color:#C3D0DA; font-size:18px; line-height:1.42; margin-top:13px; }
+.tmdb-candidate.focus .tmdb-candidate-meta, .tmdb-candidate.focus .tmdb-candidate-overview { color:#28343D; }
+
+/* AVPlay ve HTML5 icin ortak yazilim altyazi katmani. TV'nin global
+   Caption ayarina bagli kalmadan secilen parcayi goruntuler. */
+#subtitle-layer {
+  position:fixed; z-index:50; left:250px; right:250px; bottom:74px;
+  display:none; pointer-events:none; text-align:center; white-space:pre-line;
+  color:#FFF; font-size:42px; line-height:1.28; font-weight:600;
+  text-shadow:0 3px 5px #000, 0 0 8px #000, 2px 0 2px #000, -2px 0 2px #000;
+}
+#subtitle-layer span { display:inline; padding:5px 12px; border-radius:5px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+#subtitle-layer.on { display:block; }
+#subtitle-layer.lifted { bottom:320px; }
+#subtitle-layer.subtitle-pos-middle { bottom:150px; }
+#subtitle-layer.subtitle-pos-low { bottom:30px; }
+#subtitle-layer.subtitle-pos-middle.lifted, #subtitle-layer.subtitle-pos-low.lifted { bottom:320px; }
+#subtitle-layer.subtitle-size-small { font-size:34px; }
+#subtitle-layer.subtitle-size-normal { font-size:42px; }
+#subtitle-layer.subtitle-size-large { font-size:50px; }
+#subtitle-layer.subtitle-size-xlarge { font-size:58px; }
+#subtitle-layer.subtitle-color-yellow { color:#ffe66d; }
+#subtitle-layer.subtitle-bg-soft span { background:rgba(0,0,0,.55); }
+#subtitle-layer.subtitle-bg-solid span { background:#000; }
+#subtitle-layer.subtitle-bg-shadow span { background:transparent; }
+
+.subtitle-style-shade, .next-episode, .vod-error-friendly {
+  position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(3,7,10,.82);
+}
+.subtitle-style-panel {
+  width:760px; padding:42px 48px 34px; border-radius:16px; background:var(--panel);
+  border:1px solid var(--line); box-shadow:0 24px 90px rgba(0,0,0,.58);
+}
+.subtitle-style-title { font-size:36px; font-weight:750; }
+.subtitle-style-sub { color:var(--muted); font-size:19px; margin:8px 0 24px; }
+.subtitle-style-row { height:66px; display:flex; justify-content:space-between; align-items:center; padding:0 22px; border-radius:8px; font-size:23px; }
+.subtitle-style-row b { color:var(--accent); }
+.subtitle-style-row.focus { background:var(--accent); color:#10161c; }
+.subtitle-style-row.focus b { color:#10161c; }
+.subtitle-style-help { margin-top:24px; color:var(--dim); text-align:center; font-size:18px; }
+
+.next-card { width:800px; padding:52px 58px; border-radius:18px; background:var(--panel); border:1px solid var(--line); text-align:center; }
+.next-kicker { color:var(--accent); font-size:21px; text-transform:uppercase; letter-spacing:1.4px; }
+.next-title { margin-top:12px; font-size:38px; font-weight:750; }
+.next-count { margin-top:14px; color:var(--muted); font-size:21px; }
+.next-count.cancelled { color:#F5D7A1; }
+.next-actions, .vod-error-actions { display:flex; justify-content:center; margin-top:34px; }
+.next-actions span, .vod-error-actions span { margin-right:14px; padding:15px 26px; border-radius:8px; background:var(--raised); font-size:21px; }
+.next-actions span:last-child, .vod-error-actions span:last-child { margin-right:0; }
+.next-actions .focus, .vod-error-actions .focus { background:var(--accent); color:#10161c; font-weight:700; }
+.next-help, .vod-error-help { margin-top:25px; color:var(--dim); font-size:17px; }
+
+.vod-error-card { width:1020px; min-height:480px; display:flex; padding:44px; border-radius:18px; background:var(--panel); border:1px solid var(--line); box-shadow:0 28px 100px rgba(0,0,0,.6); }
+.vod-error-poster { width:250px; height:370px; flex:0 0 250px; margin-right:42px; border-radius:10px; background:var(--panel-2) center/cover no-repeat; }
+.vod-error-copy { flex:1; display:flex; flex-direction:column; justify-content:center; }
+.vod-error-title { color:var(--accent); font-size:25px; }
+.vod-error-name { font-size:37px; font-weight:750; margin-top:10px; }
+.vod-error-note { color:var(--muted); font-size:21px; line-height:1.48; margin-top:24px; }
+.vod-error-actions { justify-content:flex-start; flex-wrap:wrap; }
+
+.osd {
+  position:absolute; left:0; right:0; bottom:0; padding:44px 56px 46px;
+  background:linear-gradient(to top, rgba(6,10,14,.95) 12%, rgba(6,10,14,.75) 55%, rgba(6,10,14,0));
+}
+.osd .ch { display:flex; align-items:center; margin-bottom:14px; }
+.osd .chno { font-size:44px; color:var(--accent); min-width:90px; margin-right:22px; }
+.osd .chname { font-size:40px; font-weight:700; }
+.osd .prg { font-size:26px; margin-bottom:6px; }
+.osd .sub { font-size:21px; color:var(--muted); }
+.osd .seek { height:8px; background:rgba(255,255,255,.2); border-radius:4px; margin-top:18px; }
+.osd .seek i { display:block; height:100%; background:var(--accent); border-radius:4px; }
+.osd .times { display:flex; justify-content:space-between; font-size:19px; color:var(--muted); margin-top:8px; }
+.live-compact-stats {
+  display:flex; flex-wrap:wrap; max-width:1320px; margin-top:18px;
+  padding:14px 18px; border:1px solid rgba(255,255,255,.18); border-radius:9px;
+  background:rgba(5,9,14,.76); color:#fff; font-size:18px;
+}
+.live-compact-stats span { margin:0 26px 10px 0; white-space:nowrap; }
+.live-compact-stats b { color:var(--muted); font-weight:500; margin-right:7px; }
+
+/* Film/dizi kontrol cubugu: ince Samsung kumandasinda yalnizca yon + OK yeterli. */
+.vod-osd { padding-bottom:34px; }
+.vod-osd.compact { padding-bottom:38px; }
+.vod-identity {
+  position:absolute; left:58px; top:46px; max-width:880px; padding:16px 22px 17px;
+  border-left:5px solid var(--accent); border-radius:0 9px 9px 0;
+  background:linear-gradient(90deg,rgba(5,10,15,.9),rgba(5,10,15,.56),rgba(5,10,15,0));
+  text-shadow:0 2px 7px rgba(0,0,0,.8);
+}
+.vod-identity-type { color:var(--accent); font-size:14px; font-weight:900; letter-spacing:3px; }
+.vod-identity-title { margin-top:3px; font-size:31px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vod-identity-episode { margin-top:3px; color:#E2E9EE; font-size:22px; font-weight:650; }
+.vod-identity-meta { margin-top:4px; color:#AEBCC7; font-size:16px; }
+.vod-clock {
+  position:absolute; right:58px; top:48px; min-width:120px; padding:10px 16px;
+  border-radius:9px; background:rgba(5,10,15,.58); text-align:right; text-shadow:0 2px 7px rgba(0,0,0,.85);
+}
+.vod-clock b { display:block; color:#fff; font-size:25px; }
+.vod-clock span { display:block; margin-top:3px; color:#C5D0D8; font-size:14px; }
+.vod-pause-cinema {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(4,8,12,.88) 0%,rgba(4,8,12,.64) 37%,rgba(4,8,12,.24) 68%,rgba(4,8,12,.38) 100%),
+             linear-gradient(0deg,rgba(4,8,12,.6),rgba(4,8,12,.12));
+  animation:vod-pause-fade .45s ease-out both;
+}
+@keyframes vod-pause-fade { from { opacity:0; } to { opacity:1; } }
+.vod-pause-copy { position:absolute; left:92px; top:270px; width:820px; text-shadow:0 3px 9px rgba(0,0,0,.9); }
+.vod-pause-status { color:var(--accent); font-size:16px; font-weight:900; letter-spacing:4px; }
+.vod-pause-parent { margin-top:18px; color:#D6E0E8; font-size:24px; font-weight:750; text-transform:uppercase; }
+.vod-pause-title { margin-top:3px; font-size:54px; line-height:1.08; font-weight:850; }
+.vod-pause-meta { margin-top:16px; color:#E3EAF0; font-size:23px; font-weight:700; }
+.vod-pause-plot { max-height:112px; margin-top:24px; overflow:hidden; color:#D3DEE6; font-size:21px; line-height:1.45; }
+.vod-pause-time { margin-top:24px; color:#fff; font-size:19px; font-weight:700; }
+.vod-pause-help { margin-top:9px; color:#AEBCC7; font-size:16px; }
+.seek-feedback { display:flex; align-items:center; margin-top:10px; color:#D9E3EA; font-size:18px; }
+.seek-feedback b { min-width:82px; color:var(--accent); font-size:23px; }
+.seek-feedback span { color:#AAB8C2; }
+.vod-key-help { color:var(--muted); font-size:17px; text-align:center; margin-top:15px; }
+.tech-stats {
+  width:780px; display:grid; grid-template-columns:1fr 1fr; column-gap:34px; row-gap:7px;
+  margin-top:20px; padding:18px 22px; border:1px solid rgba(255,255,255,.18);
+  border-radius:10px; background:rgba(5,9,14,.78); font-size:18px;
+}
+.tech-stats > div { display:flex; justify-content:space-between; min-width:0; }
+.tech-stats b { color:var(--muted); font-weight:500; margin-right:16px; }
+.tech-stats span { color:#fff; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tech-stats .tech-note {
+  display:block; grid-column:1 / span 2; margin-top:5px; color:var(--muted); font-size:15px;
+}
+.vod-osd .tech-stats { width:auto; }
+.vod-osd.modern {
+  padding:80px 72px 34px;
+  background:linear-gradient(to top,rgba(3,7,11,.98) 5%,rgba(3,7,11,.84) 48%,rgba(3,7,11,.3) 78%,rgba(3,7,11,0));
+}
+.vod-modern-status { color:#FFF; font-size:22px; font-weight:800; letter-spacing:.4px; }
+.vod-osd.modern .sub { margin-top:5px; font-size:17px; }
+.vod-osd.modern .seek { height:7px; margin-top:15px; overflow:hidden; }
+.vod-osd.modern .seek i {
+  width:100%; transform:scaleX(0); transform-origin:left center;
+  transition:transform .16s linear; will-change:transform;
+}
+.vod-actions { display:flex; align-items:center; min-height:78px; margin-top:17px; white-space:nowrap; }
+.vod-action-group { display:flex; align-items:center; flex-shrink:0; }
+.vod-action-group.transport { padding-right:19px; margin-right:12px; border-right:1px solid rgba(255,255,255,.2); }
+.vod-action-group.content { min-width:0; }
+.vod-action-group.utility { margin-left:auto; padding-left:18px; }
+.vod-action {
+  position:relative; min-width:150px; height:54px; display:flex; align-items:center; justify-content:center;
+  margin:0 7px; padding:0 20px; border-radius:27px; border:2px solid rgba(255,255,255,.08);
+  background:rgba(32,43,53,.88); color:var(--text); font-size:18px; white-space:nowrap;
+  overflow:hidden;
+  transition:transform .14s ease,background-color .14s ease,border-color .14s ease,opacity .14s ease;
+}
+.vod-action-group .vod-action:first-child { margin-left:0; }
+.vod-action.separated { margin-left:32px; }
+.vod-action.round { min-width:58px; width:58px; height:58px; padding:0; border-radius:50%; overflow:visible; }
+.vod-action.compact-action { min-width:58px; width:58px; padding:0; overflow:visible; }
+.vod-action-group.content .vod-action { min-width:132px; padding-left:15px; padding-right:15px; }
+.vod-action.utility-action {
+  width:238px; min-width:238px; margin-right:0; border-color:rgba(105,190,202,.4);
+  background:rgba(25,71,81,.92); color:#EAFBFD;
+}
+.vod-action.utility-action .vod-action-text { max-width:185px; overflow:hidden; text-overflow:ellipsis; }
+.vod-action-icon { width:25px; height:25px; display:flex; align-items:center; justify-content:center; margin-right:10px; }
+.vod-action.round .vod-action-icon,.vod-action.compact-action .vod-action-icon { margin-right:0; }
+.vod-action-icon .ui-icon { width:25px; height:25px; }
+.vod-action.focus {
+  z-index:2; transform:scale(1.06); border-color:#fff; background:rgba(245,248,250,.98);
+  color:#071018; font-weight:750; box-shadow:0 0 0 3px rgba(255,255,255,.2),0 9px 25px rgba(0,0,0,.35);
+}
+.vod-action.utility-action.focus { background:#DFF8FA; color:#07191D; border-color:#fff; }
+.vod-action.round.focus:after,.vod-action.compact-action.focus:after {
+  content:attr(data-label); position:absolute; left:50%; bottom:68px; transform:translateX(-50%);
+  padding:7px 11px; border-radius:6px; background:rgba(3,7,11,.94); color:#fff;
+  font-size:15px; font-weight:650; white-space:nowrap;
+}
+.vod-action.disabled { opacity:.34; color:#A3ACB3; background:rgba(23,34,44,.62); }
+.vod-action.disabled.focus { transform:none; border-color:transparent; box-shadow:none; }
+.vod-previous-hint { margin-top:12px; color:#FFE099; font-size:17px; text-align:center; }
+
+.vod-episodes-shade {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(2,6,10,.08) 0%,rgba(2,6,10,.2) 43%,rgba(2,6,10,.83) 66%,rgba(2,6,10,.96) 100%);
+}
+.vod-episodes-panel {
+  position:absolute; right:0; top:0; bottom:0; width:1040px; padding:62px 50px 34px;
+  background:linear-gradient(90deg,rgba(7,13,19,.62),rgba(7,13,19,.96) 25%);
+  box-shadow:-35px 0 90px rgba(0,0,0,.42);
+}
+.vod-episodes-heading span { display:block; color:var(--accent); font-size:16px; font-weight:800; text-transform:uppercase; }
+.vod-episodes-heading b { display:block; margin-top:5px; font-size:39px; }
+.vod-episodes-body { display:flex; height:760px; margin-top:28px; }
+.vod-episode-seasons { width:235px; padding-right:18px; border-right:1px solid rgba(255,255,255,.14); }
+.vod-episode-season {
+  height:68px; margin-bottom:8px; padding:12px 15px; border:2px solid transparent; border-radius:10px;
+  background:rgba(29,40,50,.7); color:#C7D1D8;
+}
+.vod-episode-season b,.vod-episode-season span { display:block; }
+.vod-episode-season b { font-size:20px; }.vod-episode-season span { margin-top:3px; color:#8F9DA7; font-size:14px; }
+.vod-episode-season.selected { background:rgba(49,65,78,.88); color:#fff; }
+.vod-episode-season.focus { border-color:#fff; background:var(--accent); color:#10161C; }
+.vod-episode-season.focus span { color:#3A4650; }
+.vod-episode-list { flex:1; padding-left:20px; overflow:hidden; }
+.vod-episode-row {
+  height:82px; display:flex; align-items:center; margin-bottom:8px; padding:0 15px;
+  border:2px solid transparent; border-radius:12px; background:rgba(25,36,45,.72); color:#DCE5EA;
+}
+.vod-episode-row.focus { border-color:#fff; background:rgba(68,85,98,.96); transform:scale(1.012); }
+.vod-episode-row.current { box-shadow:inset 4px 0 0 var(--accent); }
+.vod-episode-number { width:48px; color:var(--accent); font-size:25px; font-weight:850; text-align:center; }
+.vod-episode-copy { min-width:0; flex:1; padding:0 12px; }
+.vod-episode-copy b,.vod-episode-copy span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vod-episode-copy b { font-size:20px; }.vod-episode-copy span { margin-top:5px; color:#AEBCC7; font-size:15px; }
+.vod-episode-row em { color:#FFE099; font-size:14px; font-style:normal; }
+.vod-episodes-help { position:absolute; left:305px; right:50px; bottom:30px; color:#96A4AE; font-size:15px; text-align:center; }
+
+.vod-tools-shade {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(4,7,10,.14),rgba(4,7,10,.86));
+}
+.vod-tools-panel {
+  position:absolute; right:0; top:0; bottom:0; width:680px; padding:78px 52px 38px;
+  background:rgba(10,16,22,.98); border-left:1px solid rgba(255,255,255,.14);
+  box-shadow:-24px 0 80px rgba(0,0,0,.48);
+}
+.vod-tools-title { font-size:38px; font-weight:800; }
+.vod-tools-sub { margin:7px 0 30px; color:var(--muted); font-size:18px; }
+.vod-tool-row {
+  height:72px; display:flex; align-items:center; margin-bottom:9px; padding:0 20px;
+  border:2px solid transparent; border-radius:10px; color:#D9E2E8;
+  background:rgba(31,44,56,.78); font-size:22px;
+}
+.vod-tool-row.focus { border-color:#FFF0B5; background:var(--accent); color:#10161C; font-weight:750; }
+.vod-tools-help { position:absolute; left:52px; right:52px; bottom:38px; color:var(--muted); font-size:16px; text-align:center; }
+.vod-content-panel { overflow:hidden; }
+.content-tech-stats { margin-top:22px; padding-bottom:16px; border-bottom:1px solid rgba(255,255,255,.1); }
+.vod-content-panel > .tech-stats { width:auto; box-sizing:border-box; margin-top:18px; }
+
+.vod-completion {
+  position:absolute; left:0; top:0; right:0; bottom:0; background-position:center; background-size:cover;
+  background-color:#071018;
+}
+.vod-completion-shade {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(4,9,14,.96) 0%,rgba(4,9,14,.82) 38%,rgba(4,9,14,.34) 72%,rgba(4,9,14,.48) 100%),
+             linear-gradient(0deg,rgba(4,9,14,.82),rgba(4,9,14,.12));
+}
+.vod-completion-copy { position:absolute; left:100px; top:300px; width:980px; text-shadow:0 3px 10px rgba(0,0,0,.9); }
+.vod-completion-kicker { color:var(--accent); font-size:18px; font-weight:900; letter-spacing:4px; }
+.vod-completion-title { margin-top:16px; font-size:55px; line-height:1.08; font-weight:850; }
+.vod-completion-note { margin-top:18px; color:#D3DEE6; font-size:22px; }
+.vod-completion-actions { display:flex; margin-top:38px; }
+.vod-completion-actions span {
+  min-width:190px; height:58px; display:flex; align-items:center; justify-content:center;
+  margin-right:14px; padding:0 24px; border-radius:9px; background:rgba(38,52,64,.94); font-size:20px;
+}
+.vod-completion-actions span.focus { background:var(--accent); color:#10161C; font-weight:750; }
+.vod-completion-help { margin-top:22px; color:#AEBCC7; font-size:16px; }
+
+/* Goruntu bicimi secici: cok sayida modu kumandayla tek tek cevirmek yerine
+   okunabilir bir listeden dogrudan secmeye yarar. */
+.aspect-shade {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(4,7,10,.15),rgba(4,7,10,.82));
+}
+.aspect-panel {
+  position:absolute; right:70px; top:120px; width:620px; padding:38px 42px 32px;
+  border:1px solid var(--line); border-radius:14px; background:rgba(13,21,28,.98);
+  box-shadow:0 24px 90px rgba(0,0,0,.55);
+}
+.aspect-title { font-size:34px; font-weight:700; }
+.aspect-sub { color:var(--muted); font-size:18px; margin:5px 0 24px; }
+.aspect-row {
+  height:74px; display:flex; align-items:center; padding:0 18px; border-radius:8px;
+  color:#C3D0DA; font-size:22px;
+}
+.aspect-row.current { color:var(--accent); }
+.aspect-row.unsupported { color:var(--dim); }
+.aspect-row.focus { background:var(--accent); color:#10161C; font-weight:700; }
+.aspect-check { width:38px; flex:0 0 38px; font-size:24px; }
+.aspect-help { color:var(--muted); font-size:16px; margin-top:24px; }
+
+/* Ses ve altyazi secici. Video panelin arkasinda oynamaya devam eder. */
+.track-shade {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  background:linear-gradient(90deg,rgba(4,7,10,.12) 0%,rgba(4,7,10,.42) 46%,rgba(4,7,10,.88) 100%);
+}
+.track-panel {
+  position:absolute; right:0; top:0; bottom:0; width:980px; padding:54px 54px 38px;
+  background:rgba(10,15,20,.97); border-left:1px solid rgba(255,255,255,.12);
+  box-shadow:-24px 0 70px rgba(0,0,0,.4);
+}
+.track-title { font-size:38px; font-weight:700; }
+.track-sub { color:var(--muted); font-size:19px; margin-top:5px; }
+.track-warning {
+  margin-top:18px; padding:14px 18px; border-radius:7px;
+  background:rgba(226,87,76,.16); color:#F3B3AE; font-size:18px;
+}
+.track-recovery { margin-top:7px; color:#F5D7A1; font-size:15px; }
+.track-cols { display:flex; height:790px; margin-top:30px; }
+.track-col {
+  width:420px; flex:0 0 420px; margin-right:24px; padding:18px 16px;
+  border:2px solid var(--line); border-radius:10px; background:rgba(18,26,34,.7);
+}
+.track-col:last-child { margin-right:0; }
+.track-col.focused { border-color:#6B5630; }
+.track-head { font-size:26px; font-weight:700; color:var(--muted); padding:0 14px 14px; }
+.track-col.focused .track-head { color:var(--accent); }
+.track-list { overflow:hidden; }
+.track-row {
+  height:68px; display:flex; align-items:center; border-radius:7px; padding:0 14px;
+  color:#C3D0DA; font-size:20px; overflow:hidden; white-space:nowrap;
+}
+.track-row span:last-child { overflow:hidden; text-overflow:ellipsis; }
+.track-row.current { color:var(--accent); }
+.track-row.compatibility { color:#F5C66A; font-size:20px; }
+.track-row.compatibility .track-check { color:#F5C66A; }
+.track-row.compatibility.focus { color:#10161C; }
+.track-row.disabled { color:var(--dim); }
+.track-row.disabled.focus { background:#66717A; color:#E1E6EA; }
+.track-row.focus { background:var(--accent); color:#10161C; font-weight:700; }
+.track-check { width:34px; flex:0 0 34px; font-size:24px; }
+.track-empty { color:var(--dim); font-size:19px; line-height:1.5; padding:18px 14px; }
+.track-help { position:absolute; left:54px; right:54px; bottom:32px; color:var(--muted); font-size:17px; }
+
+.chnum-entry {
+  position:absolute; top:70px; right:70px; background:rgba(6,10,14,.9);
+  border:3px solid var(--accent); border-radius:10px;
+  padding:18px 34px; font-size:56px; color:var(--accent);
+}
+
+.player-msg {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  display:flex; align-items:center; justify-content:center;
+  flex-direction:column; text-align:center; padding:0 200px;
+}
+.player-msg .big { font-size:32px; margin-bottom:18px; }
+.player-msg .small { font-size:21px; color:var(--muted); line-height:1.5; }
+
+/* TX3G icin AVPlay acilmadan once calisan tek-baglanti hazirlik ekrani. */
+.vod-preparation {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  display:flex; align-items:center; justify-content:center;
+  padding:0 260px; background:radial-gradient(circle at 50% 42%,rgba(33,48,61,.96),rgba(5,9,13,.99) 68%);
+}
+.prep-card {
+  width:1040px; padding:58px 68px 48px; border-radius:18px;
+  background:rgba(13,21,28,.96); border:1px solid rgba(255,255,255,.13);
+  box-shadow:0 28px 100px rgba(0,0,0,.58); text-align:center;
+}
+.prep-title { font-size:42px; font-weight:700; color:var(--text); }
+.prep-detail { margin-top:14px; font-size:23px; color:var(--muted); }
+.prep-source {
+  display:inline-block; margin-top:22px; padding:10px 18px; border-radius:7px;
+  background:rgba(226,174,82,.12); color:var(--accent); font-size:19px;
+}
+.prep-bar {
+  position:relative; height:16px; margin-top:38px; overflow:hidden;
+  border-radius:8px; background:rgba(255,255,255,.12);
+}
+.prep-bar i { display:block; height:100%; background:var(--accent); border-radius:8px; transition:width .22s linear; }
+.prep-bar.indeterminate i { width:32% !important; animation:prep-move 1.15s ease-in-out infinite; }
+@keyframes prep-move { from { transform:translateX(-110%); } to { transform:translateX(420%); } }
+.prep-percent { margin-top:14px; color:var(--text); font-size:22px; font-weight:700; }
+.prep-stats { display:flex; justify-content:space-between; margin-top:16px; color:var(--muted); font-size:19px; }
+.prep-help { margin-top:38px; color:var(--dim); font-size:18px; }
+
+/* Ana ekrandan cikis onayi */
+.exit-confirm {
+  position:absolute; left:0; top:0; right:0; bottom:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(3,7,10,.78);
+}
+.exit-box {
+  width:720px; padding:46px 50px 36px; border-radius:14px;
+  background:var(--panel); border:1px solid var(--line);
+  box-shadow:0 24px 80px rgba(0,0,0,.55);
+}
+.exit-title { font-size:34px; font-weight:700; margin-bottom:12px; }
+.exit-sub { color:var(--muted); font-size:20px; margin-bottom:30px; }
+.exit-actions { display:flex; }
+
+/* ---------------- Ortak ---------------- */
+
+#spinner { position:fixed; left:0; top:0; right:0; bottom:0; z-index:70; display:none; }
+#spinner.on { display:flex; align-items:center; justify-content:center; }
+#spinner .ring {
+  width:74px; height:74px; border:6px solid rgba(242,179,61,.22);
+  border-top-color:var(--accent); border-radius:50%;
+  animation:spin .85s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+#toast {
+  position:fixed; left:50%; bottom:86px; transform:translateX(-50%);
+  background:var(--raised); border:1px solid var(--line); border-radius:9px;
+  padding:18px 34px; font-size:22px; z-index:80; display:none;
+}
+#toast.on { display:block; }
+
+.empty {
+  display:flex; align-items:center; justify-content:center; height:100%;
+  color:var(--dim); font-size:22px; text-align:center; padding:0 60px; line-height:1.5;
+}
+
+#diag {
+  position:fixed; left:0; top:0; right:0; bottom:0; z-index:99999;
+  display:none; overflow:auto;
+  padding:48px 56px; background:#0d0d11; color:#dcdcdc;
+  font:20px/1.4 "Courier New",monospace; white-space:pre-wrap; word-break:break-word;
+}
+#diag b { color:#ff7676; font-size:26px; display:block; margin-bottom:20px; }
+#diag i { color:#6fa8ff; font-style:normal; }
+
+.hidden { display:none !important; }

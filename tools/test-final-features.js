@@ -1,0 +1,27 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const root=path.resolve(__dirname,'..');
+const app=fs.readFileSync(path.join(root,'js/app.js'),'utf8');
+const views=fs.readFileSync(path.join(root,'js/views.js'),'utf8');
+const util=fs.readFileSync(path.join(root,'js/util.js'),'utf8');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+
+assert(app.includes("if (c === KEY.LEFT) { this.togglePreviousChannel(); return; }"), 'Canli Sol tus onceki kanali acmali');
+assert(app.includes("if (c === KEY.RIGHT) { this.showRecentChannels(); return; }"), 'Canli Sag tus son kanallari acmali');
+assert(app.includes("if (c === KEY.UP) { this.toggleLiveInfoCard(); return; }"), 'Canli Yukari tus bilgi kartini acmali');
+assert(app.includes("if (c === KEY.DOWN) { this.openLiveDailyEpg(); return; }"), 'Canli Asagi tus gunluk EPG acmali');
+assert(app.includes("if (c === KEY.ENTER) { this.returnToPreview(); return; }"), 'Canli OK dogrudan on izlemeye donmeli');
+assert(!app.includes('showChannelList:'), 'Eski ara kanal secici uretim kodundan kaldirilmali');
+assert(app.includes("Api.shortEpg(ch.stream_id, 100)"), 'Gunluk EPG yeterli program istemeli');
+assert(app.includes("list = CategoryVisibility.visibleList('live', list)"));
+assert(app.includes('list = CategoryVisibility.visibleList(kind, list)'));
+assert(app.includes("var requestedSubtitle = meta._sessionSubtitlePreference || 'off'"), 'Yeni VOD altyazisiz acilmali');
+assert(views.includes("App.live.openDailyEpg(chans.items[chans.index])"));
+assert(views.includes("Views.categoryVisibility = function (kind)"));
+assert(views.includes("Views.favoriteOrder = function ()"));
+assert(views.includes("Views.remoteGuide = function ()"));
+assert(util.includes("preferredAudio: 'auto', preferredSubtitle: 'off'"));
+assert(!html.includes('mp4box.all.min.js') && !html.includes('js/compat.js'), 'Eski deneysel MSE kutuphaneleri uretime girmemeli');
+assert(html.includes('js/servis.js'), 'Yerel MP4 uyumluluk servisi uygulamaya baglanmali');
+assert(!html.includes('js/wasm-compat.js'), 'WASM deneyi uretim paketine girmemeli');
+console.log('Nihai ozellik baglantilari ve uretim temizligi PASS');

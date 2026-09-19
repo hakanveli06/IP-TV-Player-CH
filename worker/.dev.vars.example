@@ -1,0 +1,3 @@
+# Copy this file to .dev.vars for local development only.
+# Never commit a real TMDb token.
+TMDB_READ_TOKEN=replace-with-your-tmdb-api-read-access-token

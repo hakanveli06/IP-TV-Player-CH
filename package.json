@@ -1,0 +1,14 @@
+{
+  "name": "hm-player-tizen",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "test": "node tools/test.js && node tools/test-strategy.js && node tools/test-preflight.js && node tools/test-accounts.js && node tools/test-range-discipline.js && node tools/test-subtitle-recovery.js && node tools/test-subtitle-ui.js && node tools/test-preview.js && node tools/test-final-features.js && node tools/test-aspect.js && node tools/test-v116.js && node tools/test-v117.js && node tools/test-v1171.js && node tools/test-tmdb.js && node tools/test-v118.js && node tools/test-v119.js && node tools/test-v1191.js && node tools/test-v120.js && node tools/test-v121.js && node tools/test-v122.js && node tools/test-v1228.js && node tools/test-v123.js && node tools/test-v124.js && node tools/test-v125.js && node tools/test-v126.js && node tools/test-v127.js && node tools/test-v128.js && node tools/test-v1281.js && node tools/test-v129.js && node tools/test-v130.js && node tools/test-v1301.js && node tools/test-v131.js && node tools/test-v132.js && node tools/test-v1321.js && node tools/test-v1322.js && node tools/test-v200.js && node tools/test-servis-tazeleme.js && node tools/test-tizen6-compat.js",
+    "build": "node tools/build.js",
+    "audit:packages": "node tools/audit-packages.js",
+    "audit:public": "node tools/audit-public-source.js",
+    "test:worker": "npm --prefix worker test",
+    "check:worker": "npm --prefix worker run check",
+    "verify": "node tools/verify.js && npm run test:worker && npm run check:worker && npm run audit:public"
+  }
+}
