@@ -1,0 +1,23 @@
+# Dependencies and build outputs
+node_modules/
+dist/
+*.wgt
+*.zip
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+.private/
+private-config.*
+secrets.*
+
+# Diagnostics and local tooling
+.codex-diagnostics/
+*.log
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
